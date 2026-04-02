@@ -1,0 +1,11 @@
+version: "2"  # Required version field
+
+authtoken: 1j12mg7an8lgpFAYMyLzdfjekVt_2AhuR4bNHMuY9FqbV8PUx
+region: us  # or another region like eu, ap, au, etc.
+tunnels:
+  my_tunnel:
+    proto: http
+    addr: 8000  # Change to your desired port
+  apple_tunnel:
+    proto: http
+    addr: 3000  # Change to your desired port

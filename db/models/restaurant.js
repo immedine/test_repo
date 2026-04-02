@@ -1,0 +1,326 @@
+'use strict';
+module.exports = function (app, mongoose) {
+  const schema = new mongoose.Schema({
+    name: {
+      type: String,
+      required: true
+    },
+    introductoryText: {
+      type: String
+    },
+    logo: {
+      type: String,
+    },
+    primaryColor: {
+      type: String
+    },
+    footerColor: {
+      type: String
+    },
+    secondaryColor: {
+      type: String
+    },
+    status: {
+      type: Number,
+      default: app.config.contentManagement.restaurant.active
+    },
+    createdByAdmin: {
+      type: Boolean,
+      default: false
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'RestaurantOwner',
+      default: null
+    },
+    masterRestaurant: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Restaurant',
+      default: null
+    },
+    location: {
+      type: { type: String, default: 'Point' },
+      coordinates: [Number], // [longitude, latitude]
+    },
+    address: {
+      addressLine1: String,
+      addressLine2: String,
+      city: String,
+      state: String,
+      country: String,
+      postalCode: String
+    },
+    deviceType: [{
+      type: Number,
+      enum: Object.values(app.config.user.deviceType)
+    }],
+    accessModules: [{
+      'moduleKey': {
+        'type': String
+      },
+      'moduleName': {
+        'type': String
+      },
+    }],
+    config: {
+      hideCardView: {
+        type: Boolean,
+        default: false
+      },
+      defaultAppMenuView: {
+        type: Number,
+        default: app.config.contentManagement.defaultAppView.list
+      },
+      defaultAppModeLight: {
+        type: Boolean,
+        default: true
+      },
+      hideMenuDetails: {
+        type: Boolean,
+        default: false
+      },
+      showBanner: {
+        type: Boolean,
+        default: false
+      },
+      chargePerParcel: {
+        type: Number,
+        default: 0
+      },
+      hideIngredientDetails: {
+        type: Boolean,
+        default: false
+      },
+      menuEnabled: {
+        type: Boolean,
+        default: true
+      },
+      orderEnabled: {
+        type: Boolean,
+        default: false
+      },
+      parcels: [{
+        name: String,
+        price: Number,
+        status: Number // 1: Active, 2: Deleted
+      }],
+      waters: [{
+        name: String,
+        price: Number,
+        status: Number // 1: Active, 2: Deleted
+      }],
+      cardColor: {
+        type: String,
+        default: '#FFFFFF'
+      },
+      bgColor: {
+        type: String,
+        default: '#FFFFFF'
+      },
+      itemHeaderFontSize: {
+        type: String,
+        default: '16'
+      },
+      itemDescFontSize: {
+        type: String,
+        default: '12'
+      },
+      itemPriceFontSize: {
+        type: String,
+        default: '12'
+      },
+      menuFontFamily: {
+        type: String,
+        default: 'Inter'
+      },
+      itemNameFontColor: {
+        type: String,
+        default: '#000000'
+      },
+      itemDescFontColor: {
+        type: String,
+        default: '#000000'
+      },
+      itemPriceFontColor: {
+        type: String,
+        default: '#000000'
+      },
+      categoryHeader: {
+        type: String,
+        default: 'Tastes & Plates'
+      }
+    },
+    billConfigDetails: {
+      isLogo: {
+        type: Boolean,
+        default: true
+      },
+      isOutletName: {
+        type: Boolean,
+        default: true
+      },
+      isIntroduction: {
+        type: Boolean,
+        default: false
+      },
+      isGST: {
+        type: Boolean,
+        default: false
+      },
+      footerLine1: {
+        type: String,
+        default: 'Thank you for ordering!'
+      },
+      footerLine2: {
+        type: String,
+        default: '*** Visit Again ***'
+      },
+      footerLine3: {
+        type: String,
+        default: ''
+      },
+      receiptSize: {
+        type: String,
+        default: '57'
+      }
+    },
+    inventoryLocations: [{
+      name: String,
+      code: String,
+      status: {
+        type: Number,
+        default: app.config.contentManagement.location.active
+      }
+    }],
+    inventoryCategories: [{
+      name: String,
+      code: String,
+      status: {
+        type: Number,
+        default: app.config.contentManagement.invCategories.active
+      }
+    }],
+    gstDetails: {
+      gstEnabled: {
+        type: Boolean,
+        default: false
+      },
+      cgst: {
+        type: Number,
+        default: 2.5
+      },
+      sgst: {
+        type: Number,
+        default: 2.5
+      },
+      gstNo: {
+        type: String,
+        default: ''
+      }
+    },
+    serviceTaxDetails: {
+      serviceTaxEnabled: {
+        type: Boolean,
+        default: false
+      },
+      serviceTax: {
+        type: Number,
+        default: 0
+      }
+    },
+    subscriptionPlans: [{
+      startDate: {
+        type: Date
+      },
+      endDate: {
+        type: Date
+      },
+      planName: {
+        type: String
+      },
+      accessModules: [{
+        'moduleKey': {
+          'type': String
+        },
+        'moduleName': {
+          'type': String
+        },
+      }],
+    }],
+    timing: {
+      openingTime: {
+        type: String
+      },
+      closingTime: {
+        type: String
+      }
+    },
+    code: {
+      type: String
+    },
+    type: { // outletType (Company Owned / Franchise)
+      type: String
+    },
+    documentDetails: {
+      panNumber: {
+        type: String,
+        default: ''
+      },
+      fssaiLicenseNumber: {
+        type: String,
+        default: ''
+      },
+    },
+    aggrementDetails: {
+      agreementStartDate: {
+        type: Date
+      },
+      agreementEndDate: {
+        type: Date
+      },
+    }
+  }, {
+    versionKey: false,
+    timestamps: true,
+  });
+
+
+  /**
+   * this function is to add new restaurant
+   * @param  {String} name          name of the restaurant
+   * @param  {String} colorCode     colorCode of the restaurant
+   * @param  {String} restaurantType  restaurantType of the restaurant
+   * @return {Promise}            
+   */
+  schema.statics.createRestaurant = function (data) {
+    const { name } = data;
+    return this.exist(name)
+      .then((doc) => doc ? Promise.reject({
+        'errCode': 'RESTAURANT_ALREADY_EXISTS'
+      }) : (new this(data)).save());
+
+  };
+  /**
+   * this is to check if any restaurant exists with the name
+   * @param  {String} name name of the restaurant
+   * @return {Promise}
+   */
+  schema.statics.exist = function (name) {
+    return this.countDocuments({
+      name: name,
+      status: app.config.contentManagement.restaurant.active
+    }).exec();
+  };
+
+
+  /**
+   * this function is to remove restaurant 
+   * @param  {string} _id restaurant id
+   * @return {Promise}    Promise Object 
+   */
+  schema.statics.removeRestaurant = function (_id) {
+    return this.findByIdAndRemove(_id).exec();
+  };
+
+  return schema;
+};

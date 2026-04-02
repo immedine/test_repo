@@ -1,0 +1,27 @@
+extends index.pug
+block content
+  div(style='padding:0 30px')
+    h2(style="margin:0;margin-bottom:30px;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-weight:300;line-height:1.5;font-size:22px;color:#294661!important") #{greeting} 
+      span(style="text-transform: capitalize;")
+        | #{firstName},
+    p(style="margin:0;margin-bottom:30px;color:#294661;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-size:16px;font-weight:300")
+    | #{message}
+    br
+    br
+    div(style="display: block;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-size:16px;font-weight:300;") 
+      | Link: 
+      | 
+      a(href=loginLink target="blank" style='margin-left: 12px;text-decoration: none;display: inline-block; font-size: 18px; color: #2b81c7;font-weight:400;')
+                  |#{loginLink}
+    br
+    div(style="display: block;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-size:16px;font-weight:300;")  Email: #{emailId}
+    br
+    div(style="display: block;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-size:16px;font-weight:300;")  Password: #{password}
+    br
+    p(style="margin:0;margin-bottom:0px;color:#294661;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-size:16px;font-weight:300")
+    | #{note}
+    p(style="margin:0;margin-bottom:30px;color:#294661;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-size:16px;font-weight:300")
+    | Thank you,
+    p(style="margin:0;color:#294661;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-size:16px;font-weight:300")
+    | The ImmeDine Team    
+  include includes/foot.pug

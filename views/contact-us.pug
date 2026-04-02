@@ -1,0 +1,18 @@
+extends index.pug
+block content
+  div(style='padding:0 30px')
+    p(style="margin:0;margin-bottom:30px;color:#294661;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-size:16px;font-weight:300")
+    | #{message}
+    br
+    br
+    p(style="margin:0;margin-bottom:15px;color:#294661;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-size:16px;font-weight:300")
+    | Name: #{firstName} #{lastName}
+    p(style="margin:0;margin-bottom:15px;color:#294661;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-size:16px;font-weight:300")
+    | Email: #{email}
+    p(style="margin:0;margin-bottom:15px;color:#294661;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-size:16px;font-weight:300")
+    | Contact: #{phone}
+    p(style="margin:0;margin-bottom:15px;color:#294661;font-family:'Open Sans','Helvetica Neue','Helvetica',Helvetica,Arial,sans-serif;font-size:16px;font-weight:300")
+    | Description : #{description}
+    br
+    br    
+  include includes/foot.pug
