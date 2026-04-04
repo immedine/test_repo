@@ -31,6 +31,16 @@ module.exports = function (app) {
     });
   };
 
+  const registerDevice = function (headerData, loginData) {
+    return RestaurantOwner.registerDevice(loginData, headerData).then((output) => {
+      if (output.userDoc.accountStatus === app.config.user.accountStatus.restaurantOwner.blocked) {
+        return Promise.reject({ errCode: 'RESTAURANT_OWNER_BLOCKED_BY_ADMIN' });
+      } else {
+        return Promise.resolve(output);
+      }
+    });
+  };
+
   /**
    * Creates a new OTP for forgot password
    * @param  {String}  email The email
@@ -79,6 +89,7 @@ module.exports = function (app) {
 
   return {
     login: login,
+    registerDevice: registerDevice,
     verifyToken: verifyToken,
     socialLogin,
     forgotPassword: {

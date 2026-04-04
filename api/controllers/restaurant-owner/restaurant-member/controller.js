@@ -189,7 +189,7 @@ module.exports = function(app) {
   const addFranchiseMember = (req, res, next) => {
     req.body.restaurantRef = req.params.restaurantId;
     req.body.accountStatus = app.config.user.accountStatus.restaurantOwner.active;
-    req.body.isFranchiseMember = true;
+    req.body.isFranchise = true;
     
     restaurantOwner.crud.addRestaurantFranchiseMember(req.body)
       .then(output => {

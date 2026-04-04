@@ -15,6 +15,20 @@ module.exports = function (app) {
     },
   };
 
+  const registerDevice = {
+    email: {
+      type: 'string',
+      required: true,
+      allowEmpty: false,
+      format: 'email',
+    },
+    deviceRegistrationCode: {
+      type: 'string',
+      required: true,
+      allowEmpty: false,
+    },
+  };
+
   /////////////////////
   // Forgot Password //
   /////////////////////
@@ -110,6 +124,7 @@ module.exports = function (app) {
       requestOTP: forgotPasswordRequestOTP,
       verifyOTP: forgotPasswordVerifyOTP,
     },
+    registerDevice: registerDevice,
     signup: signup,
     socialLogin,
     sendVerificationLink

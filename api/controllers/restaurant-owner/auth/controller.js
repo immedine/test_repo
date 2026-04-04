@@ -31,6 +31,27 @@ module.exports = function (app) {
           password: req.body.password,
         }
       )
+      .then((output) =>{
+        if (!output.userDoc.isFranchise) {
+          return Promise.resolve(output);
+        } else {
+          if (!output.userDoc.registeredDevice?.length) {
+            return Promise.reject({
+              errCode: 'DEVICE_NOT_REGISTERED',
+            })
+          } else {
+            const isRegisteredDevice = output.userDoc.registeredDevice.some(each => each.deviceId === req.headers['x-auth-deviceid'] && each.deviceType?.toString() === req.headers['x-auth-devicetype']?.toString());
+
+            if (isRegisteredDevice) {
+              return Promise.resolve(output);
+            } else {
+              return Promise.reject({
+                errCode: 'DEVICE_NOT_REGISTERED',
+              })
+            }
+          }
+        }
+      })
       .then((output) =>
         app.module.session.set(
           output.userType,
@@ -46,6 +67,24 @@ module.exports = function (app) {
           refreshToken: output.refreshToken,
           user: app.utility.format.user(output.userId),
         };
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
+  const registerDevice = (req, res, next) => {
+    restaurantOwner.auth
+      .registerDevice(
+        {
+          deviceType: req.headers['x-auth-devicetype'],
+          deviceId: req.headers['x-auth-deviceid'],
+        },
+        {
+          email: req.body.email,
+          deviceRegistrationCode: req.body.deviceRegistrationCode,
+        }
+      )
+      .then((output) => {
         req.workflow.emit('response');
       })
       .catch(next);
@@ -200,6 +239,7 @@ module.exports = function (app) {
     verifyToken: verifyToken,
     verifyRegistrationToken: verifyRegistrationToken,
     signupRequest: signupRequest,
+    registerDevice: registerDevice,
     sendVerificationLink
   };
 };

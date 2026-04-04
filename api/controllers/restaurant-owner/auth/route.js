@@ -38,6 +38,7 @@ module.exports = function (app, options) {
    * Custom Login
    */
   router.post('/login', [options.validateBody(schemaValidator.login), controllers.login]);
+  router.post('/register-device', [options.validateBody(schemaValidator.registerDevice), controllers.registerDevice]);
 
   /**
    * Forgot Password request OTP

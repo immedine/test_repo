@@ -13,6 +13,24 @@ module.exports = function (app, mongoose /*, plugins*/) {
         ref: 'Restaurant',
         required: true
       },
+      deviceRegistrationCode: {
+        type: String
+      },
+      isDeviceRegistered: {
+        type: Boolean,
+        default: false
+      },
+      isFranchise: {
+        type: Boolean,
+        default: false
+      },
+      registeredDevice: [{
+        deviceId: String,
+        deviceType: Number
+      }],
+      deviceRegistrationAttempt: {
+        type: Number
+      },
       /**
        * Personal Info
        */
@@ -296,6 +314,26 @@ module.exports = function (app, mongoose /*, plugins*/) {
             errCode: 'RESTAURANT_OWNER_HAS_BEEN_SUSPENDED',
           })
       )
+      .then((restaurantOwnerDoc) =>{
+        if (restaurantOwnerDoc.isFranchise && !restaurantOwnerDoc.isDeviceRegistered) {
+          return Promise.reject({
+            errCode: 'DEVICE_NOT_REGISTERED',
+          })
+        } else {
+          return Promise.resolve(restaurantOwnerDoc)
+        }
+      })
+      // .then((restaurantOwnerDoc) =>{
+      //   if (restaurantOwnerDoc.isFranchise &&
+      //     restaurantOwnerDoc.registeredDevice
+      //   ) {
+      //     return Promise.reject({
+      //       errCode: 'DEVICE_NOT_REGISTERED',
+      //     })
+      //   } else {
+      //     return Promise.resolve(restaurantOwnerDoc)
+      //   }
+      // })
       .then((restaurantOwnerDoc) => {
         return Promise.resolve({
           userDoc: restaurantOwnerDoc,
@@ -303,6 +341,57 @@ module.exports = function (app, mongoose /*, plugins*/) {
         });
       });
   };
+
+  restaurantOwnerSchema.statics.registerDevice = function (loginData, headerData) {
+    return this.findOne({
+      'personalInfo.email': loginData.email,
+      accountStatus: {
+        $ne: app.config.user.accountStatus.restaurantOwner.deleted,
+      },
+    })
+      .exec()
+      .then((restaurantOwnerDoc) =>
+        restaurantOwnerDoc
+          ? Promise.resolve(restaurantOwnerDoc)
+          : Promise.reject({
+            errCode: 'RESTAURANT_OWNER_NOT_FOUND',
+          })
+      )
+      .then((restaurantOwnerDoc) =>
+        restaurantOwnerDoc.accountStatus !== app.config.user.accountStatus.restaurantOwner.blocked
+          ? Promise.resolve(restaurantOwnerDoc)
+          : Promise.reject({
+            errCode: 'RESTAURANT_OWNER_HAS_BEEN_SUSPENDED',
+          })
+      )
+      .then(async (restaurantOwnerDoc) =>{
+        if (restaurantOwnerDoc.deviceRegistrationCode !== loginData.deviceRegistrationCode) {
+          restaurantOwnerDoc.deviceRegistrationAttempt = restaurantOwnerDoc.deviceRegistrationAttempt ? ++restaurantOwnerDoc.deviceRegistrationAttempt : 1;
+
+          if (restaurantOwnerDoc.deviceRegistrationAttempt > 5) {
+            return Promise.reject({
+              errCode: 'REGISTRATION_CODE_MAX_ATTEMPT_REACHED',
+            })
+          }
+
+          await restaurantOwnerDoc.save();
+
+          return Promise.reject({
+            errCode: 'INVALID_REGISTRATION_CODE',
+          })
+        }
+        restaurantOwnerDoc.registeredDevice = [headerData];
+        restaurantOwnerDoc.isDeviceRegistered = true;
+        restaurantOwnerDoc.deviceRegistrationCode = "";
+        return restaurantOwnerDoc.save();
+      })
+      .then((restaurantOwnerDoc) => {
+        return Promise.resolve({
+          userDoc: restaurantOwnerDoc,
+          userType: app.config.user.role.restaurantOwner,
+        });
+      });
+  }
 
   /**
    * Creates a new OTP for forgot password
@@ -446,6 +535,11 @@ module.exports = function (app, mongoose /*, plugins*/) {
       if (userDoc.accountStatus === app.config.user.accountStatus.restaurantOwner.blocked) {
         return Promise.reject({ errCode: 'RESTAURANT_OWNER_BLOCKED' });
       }
+       if (userDoc.isFranchise && !userDoc.isDeviceRegistered) {
+          return Promise.reject({
+            errCode: 'DEVICE_NOT_REGISTERED',
+          })
+        }
 
       const exists = userDoc.socialInfo.some(
         (s) => s.socialId === socialId && s.socialType === socialType
@@ -729,6 +823,9 @@ module.exports = function (app, mongoose /*, plugins*/) {
             restaurantOwnerObj.authenticationInfo = {
               password: password,
             };
+            let uniqueCode = app.utility.getRandomCode();
+            console.log("uniqueCode ", uniqueCode)
+            restaurantOwnerObj.deviceRegistrationCode = uniqueCode;
             return new this(restaurantOwnerObj).save();
           })
           .then((updatedRestaurantOwnerObj) => {
@@ -750,8 +847,9 @@ module.exports = function (app, mongoose /*, plugins*/) {
                 message: multilangConfig.email.restaurantOwnerAddedByFranchiseOwner.message(updatedRestaurantOwnerObj?.restaurantRef?.name || ''),
                 emailText: multilangConfig.email.restaurantOwnerAddedByFranchiseOwner.emailText,
                 email: updatedRestaurantOwnerObj.personalInfo.email,
-                link: 'https://immedine.com/auth/forgot-password',
-                note: multilangConfig.email.restaurantOwnerAddedByFranchiseOwner.note,
+                codeText: multilangConfig.email.restaurantOwnerAddedByFranchiseOwner.codeText,
+                code: updatedRestaurantOwnerObj.deviceRegistrationCode,
+                link: 'https://play.google.com/',
                 teamName: updatedRestaurantOwnerObj?.restaurantRef?.name || ''
               },
               function (err, renderedText) {

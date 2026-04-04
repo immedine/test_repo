@@ -71,9 +71,9 @@ module.exports = {
       restaurantOwnerAddedByFranchiseOwner: {
         subject: (companyName) => ` ${companyName} - User Created`,
         greeting: 'Hi',
-        message: (companyName) => `You have been successfully added to your restaurant on ${companyName}. To access your account, please click the button below to generate a new password:`,
+        message: (companyName) => `You have been successfully added to your outlet on ${companyName}.`,
         emailText: "Email",
-        note: 'For security reasons, we recommend changing your password after your first login.'
+        codeText: "Code",
       },
       owner: {
         signupConfirmation: {
