@@ -14,6 +14,7 @@ module.exports = function (app) {
 
   const addRestaurant = (req, res, next) => {
     req.body.createdBy = req.session.user._id;
+    req.body.type = app.config.contentManagement.outletType.franchise;
     req.body.masterRestaurant = req.session.user.restaurantRef;
     req.body.deviceType = [app.config.user.deviceType.android];
     restaurant.create(req.body)
@@ -104,11 +105,24 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const changeStatus = (req, res, next) => {
+
+    req.franchiseId.status = req.franchiseId.status === app.config.contentManagement.restaurant.inactive ? 
+    app.config.contentManagement.restaurant.active : app.config.contentManagement.restaurant.inactive;
+
+    restaurant.edit(req.franchiseId)
+      .then(output => {
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
   return {
     create: addRestaurant,
     edit: editRestaurant,
     get: getRestaurantDetails,
     list: getRestaurantList,
     delete: deleteRestaurant,
+    changeStatus: changeStatus
   };
 };

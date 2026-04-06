@@ -22,7 +22,8 @@ module.exports = {
   restaurant: {
     active: 1,
     deleted: 2,
-    unPublished: 3
+    unPublished: 3,
+    inactive: 4
   },
   language: {
     active: 1,
@@ -120,5 +121,13 @@ module.exports = {
     subscription: 1,
     addon: 2,
     usage: 3
+  },
+  revenueShareType: {
+    percentage: 1,
+    fixed: 2
+  },
+  outletType: {
+    franchise: 1,
+    owned: 2
   }
 };

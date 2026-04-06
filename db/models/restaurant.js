@@ -259,7 +259,8 @@ module.exports = function (app, mongoose) {
       type: String
     },
     type: { // outletType (Company Owned / Franchise)
-      type: String
+      type: Number,
+      default: app.config.contentManagement.outletType.owned
     },
     documentDetails: {
       panNumber: {
@@ -278,6 +279,20 @@ module.exports = function (app, mongoose) {
       agreementEndDate: {
         type: Date
       },
+    },
+    ownerRevenueShareDetails: {
+      type: {
+        type: Number,
+        default: app.config.contentManagement.revenueShareType.percentage
+      },
+      value: {
+        type: Number,
+        default: 0
+      }
+    },
+    maxRequisitionMonthlyAmount: {
+      type: Number,
+      default: 0
     }
   }, {
     versionKey: false,

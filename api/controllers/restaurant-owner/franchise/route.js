@@ -39,6 +39,12 @@ module.exports = function (app, options) {
     controllers.create
   ]);
 
+  router.put('/change-status/:franchiseId', [
+    options.validateParams(schemaValidator.param),
+    commonMiddlewares.validateId('Restaurant', 'franchiseId'),
+    controllers.changeStatus
+  ])
+
   router.post('/list', [
     options.validateQuery(schemaValidator.listQuery),
     controllers.list
@@ -57,10 +63,10 @@ module.exports = function (app, options) {
     .put([
       options.validateBody(schemaValidator.edit),
       controllers.edit
-    ])
-    .delete([
-      controllers.delete
     ]);
+    // .delete([
+    //   controllers.delete
+    // ]);
 
   return router;
 };
