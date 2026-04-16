@@ -1279,7 +1279,14 @@ module.exports = function (app) {
     ]);
   };
 
-
+  const getInventoryCount = async (filter = {}) => {
+    try {
+      const count = await Inventory.countDocuments(filter);
+      return count;
+    } catch (error) {
+      throw error;
+    }
+  };
 
   return {
     'create': createInventory,
@@ -1294,6 +1301,7 @@ module.exports = function (app) {
     updateInventoryCountSync: updateInventoryCountSync,
     updateInventoryWithPurchase: updateInventoryWithPurchase,
     seedInventoryForRestaurant: seedInventoryForRestaurant,
-    downloadReport: downloadReport
+    downloadReport: downloadReport,
+    getCount: getInventoryCount
   };
 };

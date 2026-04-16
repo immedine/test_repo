@@ -163,9 +163,10 @@ module.exports = function (app) {
             let inAppNotification = app.config.notification.inApp(app, app.config.lang.defaultLanguage);
 
             sse.broadcastOrderUpdate({
-              orderId: output.offlineId.toString(),
+              orderId: output.orderRef?._id?.toString(),
               restaurantRef: req.session.user.restaurantRef.toString(),
               type: "PAYMENT_BY_STAFF",
+              status: app.config.contentManagement.order.completed,
               message: inAppNotification.toRestaurantOwner.billPaid.body(output.billNo, req.session.user.personalInfo.fullName),
               userRef: req.session.user._id.toString()
             });

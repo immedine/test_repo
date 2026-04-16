@@ -59,6 +59,11 @@ module.exports = function (app, options) {
     controllers.updateInventoryCategories
   ]);
 
+  router.put('/delete-inventory-category/:categoryId', [
+    // options.validateBody(schemaValidator.updateGstDetails),
+    controllers.removeInventoryCategories
+  ]);
+
   router.put('/update-parcel', [
     // options.validateBody(schemaValidator.updateGstDetails),
     controllers.updateParcel

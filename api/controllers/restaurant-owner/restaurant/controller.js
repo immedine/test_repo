@@ -11,6 +11,7 @@ module.exports = function (app) {
    */
   const restaurant = app.module.restaurant;
   const restaurantOwner = app.module.restaurantOwner;
+  const inventory = app.module.inventory;
 
   const addRestaurant = (req, res, next) => {
     req.body.createdBy = req.session.user._id;
@@ -140,6 +141,25 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const removeInventoryCategories = async (req, res, next) => {
+    const invCount = await inventory.getCount({
+      categoryId: req.params.categoryId,
+      status: app.config.contentManagement.inventory.active
+    });
+
+    if (invCount) {
+      return next({ 'errCode': 'CATEGORY_CANNOT_BE_DELETED_DUE_TO_STOCK' });
+    }
+    restaurant
+      .updateInventoryCategories(req.session.user.restaurantRef, req.body)
+      .then((output) => {
+        req.workflow.outcome.data = output;
+
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
   /**
    * Fetch Restaurant details
    * @param  {Object}   req  Request
@@ -165,6 +185,7 @@ module.exports = function (app) {
     updateGstDetails: updateGstDetails,
     updateLocations: updateLocations,
     updateInventoryCategories: updateInventoryCategories,
+    removeInventoryCategories: removeInventoryCategories,
     updateParcel: updateParcel,
     updateServiceTaxDetails: updateServiceTaxDetails,
     updateWater: updateWater,

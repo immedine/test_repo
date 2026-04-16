@@ -4,6 +4,8 @@
  * @module Controllers/Admin/order
  */
 module.exports = function (app) {
+  const mongoose = require('mongoose');
+
 
   /**
    * order module
@@ -533,13 +535,13 @@ module.exports = function (app) {
     };
 
     if (req.body.filters) {
-      let { paymentStatus, orderStatus, startDate, endDate, search, offline, userRef } = req.body.filters;
+      let { paymentStatus, orderStatus, startDate, endDate, search, offline, userRef, noFilter } = req.body.filters;
       let andFilters = [{
         restaurantRef: req.session.user.restaurantRef
       }];
 
       if (userRef) {
-        andFilters.push({ "userRef": userRef });
+        andFilters.push({ "userRef": new mongoose.Types.ObjectId(userRef) });
       }
 
       if (search && search.trim().length) {
@@ -548,7 +550,7 @@ module.exports = function (app) {
 
       if (paymentStatus) {
         andFilters.push({ "billRef.paymentDetails.status": Number(paymentStatus) });
-      } else {
+      } else if (!noFilter) {
         andFilters.push({
           "billRef.paymentDetails.status": {
             '$in': [
@@ -561,7 +563,7 @@ module.exports = function (app) {
 
       if (orderStatus) {
         andFilters.push({ "status": Number(orderStatus) });
-      } else {
+      } else if (!noFilter) {
         andFilters.push({
           "status": {
             '$in': [
@@ -600,6 +602,8 @@ module.exports = function (app) {
       if (andFilters.length > 0) {
         query.filters = { $and: andFilters };
       }
+
+      console.log("andFilters ", andFilters)
 
       query.select = {
         tableId: 1,
