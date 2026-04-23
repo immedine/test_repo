@@ -4,7 +4,7 @@ module.exports = {
   s3: {
     // 'apiVersion': '2006-03-01',
     region: process.env.S3_REGION,
-    bucket: process.env.NODE_ENV === 'production' ? 'immedine-bucket' : 'immedine-bucket',
+    bucket: process.env.NODE_ENV === 'production' ? 'immedine-bucket-2' : 'immedine-bucket-2',
     accessKeyId: process.env.S3_ACCESS_ID,
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
     maxRetries: 5,

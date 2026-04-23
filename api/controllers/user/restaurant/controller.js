@@ -10,7 +10,10 @@ module.exports = function (app) {
    * @type {Object}
    */
   const restaurant = app.module.restaurant;
-  
+  const sse = app.module.sse;
+  const table = app.module.table;
+  const notification = app.module.notification;
+
   /**
    * Fetch Restaurant details
    * @param  {Object}   req  Request
@@ -44,8 +47,37 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const callWaiter = async (req, res, next) => {
+
+    let message = "Call from Customer";
+
+    if (req.body.orderId) {
+      message += ` for order ${req.body.orderId}`;
+    }
+    if (req.body.tableId) {
+      const tableDetails = await table.getFromApp(req.body.tableId);
+      if (tableDetails && tableDetails.tableId) {
+        message += ` at table ${tableDetails.tableId}`;
+      }
+    }
+
+    sse.broadcastOrderUpdate({
+      restaurantRef: req.params.restaurantId,
+      type: "CALL_WAITER",
+      message
+    });
+
+    notification.sendInAppNotificationToRestaurantStaffs(req.params.restaurantId, {
+      notificationType: "CALL_WAITER",
+      message
+    });
+
+    req.workflow.emit('response');
+  };
+
   return {
     get: getRestaurantDetails,
-    list: getRestaurantList
+    list: getRestaurantList,
+    callWaiter: callWaiter
   };
 };

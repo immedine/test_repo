@@ -14,6 +14,8 @@ module.exports = function (app) {
    */
   const Menu = app.models.Menu;
   const Order = app.models.Order;
+  const Category = app.models.Category;
+  const ImageByAI = app.models.ImageByAI;
 
   /**
    * Creates a Menu
@@ -67,11 +69,11 @@ module.exports = function (app) {
       status: app.config.contentManagement.menu.active,
       restaurantRef: editedMenu.restaurantRef,
       _id: {
-      $ne: editedMenu._id
+        $ne: editedMenu._id
       }
     })
       .then(count => count ? Promise.reject({
-      'errCode': 'MENU_ALREADY_EXISTS'
+        'errCode': 'MENU_ALREADY_EXISTS'
       }) : editedMenu.save());
   };
 
@@ -189,6 +191,94 @@ module.exports = function (app) {
     }
   };
 
+
+  function cleanAndTag(str) {
+    // List of prepositions to remove (extend as needed)
+    const stopWords = ["and", "or", "the", "of", "in", "on", "with", "a", "an"];
+
+    // Extract only words with alphabets
+    const words = str.match(/[A-Za-z]+/g) || [];
+
+    // Filter out prepositions (case-insensitive)
+    const filtered = words.filter(
+      (w) => !stopWords.includes(w.toLowerCase())
+    );
+
+    return filtered.map((w) => w.toLowerCase());
+  }
+
+  const bulkUpload = async (MenuMock, userRef) => {
+    console.log('bulk upload cron job started');
+    const json = MenuMock;
+    // console.log("json ",json);
+
+    const obj = {};
+
+    json.categories.forEach(each => {
+      obj[each.name] = each.items;
+    });
+
+    // console.log("obj ", obj);
+
+    if (Object.keys(obj).length) {
+      let catOrder = 0;
+      for (const categoryName in obj) {
+        let categoryDoc = await Category.findOne({
+          name: categoryName,
+          restaurantRef: userRef.restaurantRef,
+          createdBy: userRef._id
+        });
+        if (!categoryDoc) {
+          catOrder++;
+          categoryDoc = await Category.create({
+            order: catOrder,
+            name: categoryName,
+            filterText: categoryName.split(' ').slice(0, 2).join(' '),
+            restaurantRef: userRef.restaurantRef,
+            createdBy: userRef._id,
+            totalMenu: obj[categoryName].length
+          });
+        }
+
+        const menuItems = obj[categoryName];
+        let menuOrder = 0;
+        for (const menuItem of menuItems) {
+          menuOrder++;
+          const { name, price, isVeg, description } = menuItem;
+
+          const cleaned = cleanAndTag(name);
+
+          const results = await ImageByAI.find({
+            $expr: {
+              $gte: [
+                { $size: { $setIntersection: ["$tags", cleaned] } },
+                2 // <-- at least 2 matches required
+              ]
+            }
+          });
+
+          // console.log("results ", results.map(r => r.url).slice(0, 2))
+
+          await Menu.insertMany([{
+            order: menuOrder,
+            name,
+            isVeg,
+            images: results.length ? results.map(r => r.url).slice(0, 1) : [],
+            description: description || "",
+            price,
+            categoryRef: categoryDoc._id,
+            restaurantRef: userRef.restaurantRef,
+            createdBy: userRef._id,
+            isCreatedByImmeDine: false
+          }], { ordered: false });
+
+        }
+      }
+    }
+
+
+  };
+
   return {
     'create': createMenu,
     'get': findMenuById,
@@ -198,6 +288,7 @@ module.exports = function (app) {
     'listFromApp': listFromApp,
     'removeInventoryItem': removeInventoryItem,
     'updateOrderCount': updateOrderCount,
-    'updateBulkOrderCount': updateBulkOrderCount
+    'updateBulkOrderCount': updateBulkOrderCount,
+    'bulkUpload': bulkUpload
   };
 };

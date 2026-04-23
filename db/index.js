@@ -65,7 +65,10 @@ module.exports = function(app) {
     Query: db.model('Query', require('./models/query')(app, mongoose, plugins)),
     Expense: db.model('Expense', require('./models/expense')(app, mongoose, plugins)),
     SubscriptionPlan: db.model('SubscriptionPlan', require('./models/subscriptionPlan')(app, mongoose, plugins)),
+    Subscription: db.model('Subscription', require('./models/subscription')(app, mongoose, plugins)),
     Vendor: db.model('Vendor', require('./models/vendor')(app, mongoose, plugins)),
+    Payment: db.model('Payment', require('./models/payment')(app, mongoose, plugins)),
+    Requisition: db.model('Requisition', require('./models/requisition')(app, mongoose, plugins)),
   };
 
   return db;

@@ -16,7 +16,7 @@ module.exports = function(app) {
   const controllers = require('./controller')(app);
 
 
-  router.post('/confirm-payment', controllers.verify, controllers.handleWebhook);
+  router.post('/handle-payment', controllers.verify);
 
   return {
     'public': router

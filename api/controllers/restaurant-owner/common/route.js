@@ -80,6 +80,10 @@ module.exports = function (app, options) {
     controllers.uploadImage,
   ]);
 
+  router.post('/extract-menu', [
+    controllers.extractMenu,
+  ]);
+
   router.post('/upload-multiple-images', [
     uploadImages('image'),
     options.validateFile(schemaValidator.image),

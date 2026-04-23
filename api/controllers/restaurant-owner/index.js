@@ -60,6 +60,8 @@ const controllers = {
   franchise: require("./franchise/route"),
   tableSession: require("./table-session/route"),
   subscriptionPlan: require("./subscription-plan/route"),
+  subscription: require("./subscription/route"),
+  requisition: require("./requisition/route"),
   /**
    * User Route
    */
@@ -164,6 +166,8 @@ module.exports = function(app) {
   privateRouter.use('/vendor', controllers.vendor(app, options));
   privateRouter.use('/table-session', controllers.tableSession(app, options));
   privateRouter.use("/subscription-plan", controllers.subscriptionPlan(app, options));
+  privateRouter.use("/subscription", controllers.subscription(app, options));
+  privateRouter.use("/requisition", controllers.requisition(app, options));
 
   // /**
   //  * Admin User Route

@@ -37,6 +37,10 @@ module.exports = function (app, options) {
   router.post('/list', [
     controllers.list
   ]);
+
+  router.post('/call-waiter/:restaurantId', [
+    controllers.callWaiter
+  ]);
   /**
    * Fetch/Edit restaurant
    */

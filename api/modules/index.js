@@ -17,6 +17,8 @@ module.exports = function(app) {
   const menu = require('./menu')(app);
   const order = require('./order')(app);
   const subscriptionPlan = require('./subscriptionPlan')(app);
+  const subscription = require('./subscription')(app);
+  const requisition = require('./requisition')(app);
   const bill = require('./bill')(app);
   const inventory = require('./inventory')(app);
   const table = require('./table')(app);
@@ -56,6 +58,8 @@ module.exports = function(app) {
     tableSession,
     sse,
     feedback,
-    subscriptionPlan
+    subscriptionPlan,
+    subscription,
+    requisition
   };
 };

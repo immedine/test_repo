@@ -32,7 +32,11 @@ module.exports = function (app) {
    * @return {Promise}        The promise
    */
   const findRestaurantById = function (restaurantId) {
-    return Restaurant.findById(restaurantId);
+    return Restaurant.findById(restaurantId)
+    .populate({
+      path: 'subscriptionRef',
+      select: 'planRef status',
+    });
   };
 
   /**

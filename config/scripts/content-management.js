@@ -129,5 +129,35 @@ module.exports = {
   outletType: {
     franchise: 1,
     owned: 2
+  },
+  subscriptionStatus: {
+    created: 1,
+    paymentPending: 2,
+    paid: 3,
+    failed: 4,
+    cancelled: 5,
+    expired: 6
+  },
+  subscriptionPaymentStatus: {
+    created: 1,
+    authorized: 2,
+    captured: 3,
+    failed: 4,
+    refunded: 5,
+  },
+  requisitionType: {
+    inventory: 1
+  },
+  requisitionPriority: {
+    low: 1,
+    normal: 2,
+    high: 3
+  },
+  requisitionStatus: {
+    active: 1,
+    approved: 2,
+    rejected: 3,
+    cancelled: 4,
+    completed: 5
   }
 };

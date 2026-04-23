@@ -293,6 +293,11 @@ module.exports = function (app, mongoose) {
     maxRequisitionMonthlyAmount: {
       type: Number,
       default: 0
+    },
+    subscriptionRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Subscription',
+      default: null
     }
   }, {
     versionKey: false,

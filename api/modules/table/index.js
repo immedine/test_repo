@@ -63,6 +63,19 @@ module.exports = function (app) {
       });
   };
 
+  const findTableByIdFromApp = function (tableId) {
+    return Table.findById(tableId)
+      .then(tableDetails => {
+        if (!tableDetails) {
+          return Promise.reject({
+            'errCode': 'TABLE_NOT_FOUND'
+          });
+        } else {
+          return Promise.resolve(tableDetails);
+        }
+      });
+  };
+
   /**
    * Edits a table
    * @param  {Object} editedTable The edited table document
@@ -133,6 +146,7 @@ module.exports = function (app) {
   return {
     'create': createTable,
     'get': findTableById,
+    'getFromApp': findTableByIdFromApp,
     'edit': editTable,
     'list': getList,
     'remove': removeTable,
