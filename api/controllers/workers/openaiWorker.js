@@ -4,7 +4,7 @@ const OpenAI = require("openai").default;
 // IMPORTANT: no global.Promise override here
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_KEY
+  apiKey: process.env.OPENAI_KEY,
 });
 
 parentPort.on("message", async (job) => {

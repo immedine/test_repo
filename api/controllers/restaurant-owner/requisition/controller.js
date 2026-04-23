@@ -84,7 +84,7 @@ module.exports = function(app) {
       skip: Number(req.query.skip) || app.config.page.defaultSkip,
       limit: Number(req.query.limit) || app.config.page.defaultLimit,
       filters: {
-        status: app.config.contentManagement.requisitionStatus.active,
+        // status: app.config.contentManagement.requisitionStatus.active,
         requestedByRestaurantRef: req.session.user.restaurantRef
       },
       sort: {
