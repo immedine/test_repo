@@ -159,5 +159,11 @@ module.exports = {
     rejected: 3,
     cancelled: 4,
     completed: 5
+  },
+  requisitionOrderStatus: {
+    active: 1,
+    inTransit: 2,
+    delivered: 3,
+    cancelled: 4
   }
 };

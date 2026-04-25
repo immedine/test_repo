@@ -64,6 +64,18 @@ module.exports = function (app, options) {
     controllers.approveRejectRequisition
   ]);
 
+  router.put('/create-order/:requisitionId', [
+    options.validateParams(schemaValidator.param),
+    commonMiddlewares.validateId('Requisition', 'requisitionId'),
+    controllers.createRequisitionOrder
+  ]);
+
+  router.put('/order-delivered/:orderId', [
+    options.validateParams(schemaValidator.orderIdParam),
+    commonMiddlewares.validateId('RequisitionOrder', 'orderId'),
+    controllers.requisitionOrderDelivered
+  ]);
+
   /**
    * Fetches a requisition, edits a requisition and removes a requisition
    */

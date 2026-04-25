@@ -69,6 +69,7 @@ module.exports = function(app) {
     Vendor: db.model('Vendor', require('./models/vendor')(app, mongoose, plugins)),
     Payment: db.model('Payment', require('./models/payment')(app, mongoose, plugins)),
     Requisition: db.model('Requisition', require('./models/requisition')(app, mongoose, plugins)),
+    RequisitionOrder: db.model('RequisitionOrder', require('./models/requisitionOrder')(app, mongoose, plugins)),
   };
 
   return db;

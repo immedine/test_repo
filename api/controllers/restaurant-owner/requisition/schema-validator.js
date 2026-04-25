@@ -129,6 +129,16 @@ module.exports = function (app) {
     }
   };
 
+  const orderIdParam = {
+    'orderId': {
+      type: 'string',
+      required: true,
+      'conform': function (value) {
+        return app.utility.checkMongooseObjectId(value);
+      }
+    }
+  };
+
   const list = {
     'sortConfig': {
       type: 'object',
@@ -155,6 +165,7 @@ module.exports = function (app) {
     edit: addRequisition,
     listQuery: listQuery,
     param: param,
+    orderIdParam: orderIdParam,
     list: list,
   };
 

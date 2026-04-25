@@ -50,6 +50,9 @@ module.exports = function (app, mongoose) {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Inventory'
       },
+      location: {
+        type: mongoose.Schema.Types.ObjectId,
+      },
       justification: String
     }],
     subTotal: {

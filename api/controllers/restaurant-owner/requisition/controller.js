@@ -3,10 +3,10 @@
  * This Controller handles all functionality of admin requisition
  * @module Controllers/Admin/requisition
  */
-module.exports = function(app) {
+module.exports = function (app) {
 
   function generateRequisitionId(count, restaurantName) {
-    const date = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     return `REQ-${restaurantName.slice(0, 3).toUpperCase()}-${date}-${String(count).padStart(3, '0')}`;
   }
 
@@ -15,7 +15,9 @@ module.exports = function(app) {
    * @type {Object}
    */
   const requisition = app.module.requisition;
+  const requisitionOrder = app.module.requisitionOrder;
   const restaurant = app.module.restaurant;
+  const inventory = app.module.inventory;
 
   /**
    * Adds a requisition
@@ -29,7 +31,7 @@ module.exports = function(app) {
     const restaurantDetails = await restaurant.get(req.session.user.restaurantRef);
 
     const requisitionCountQuery = {
-      restaurantRef: req.session.user.restaurantRef,
+      requestedByRestaurantRef: req.session.user.restaurantRef,
       createdAt: {
         $gte: new Date(new Date().setHours(0, 0, 0, 0)),
         $lte: new Date(new Date().setHours(23, 59, 59, 999))
@@ -64,7 +66,7 @@ module.exports = function(app) {
    * @return {Promise}       The Promise
    */
   const getRequisition = (req, res, next) => {
-    requisition.get(req.params.requisitionId,req.session.user)
+    requisition.get(req.params.requisitionId, req.session.user)
       .then(output => {
         req.workflow.outcome.data = output;
         req.workflow.emit('response');
@@ -122,7 +124,7 @@ module.exports = function(app) {
    * @return {Promise}       The Promise
    */
   const editRequisition = (req, res, next) => {
-    
+
     if (req.requisitionId.status === app.config.contentManagement.requisitionStatus.approved) {
       return next({
         'errCode': 'REQUISITION_ALREADY_APPROVED'
@@ -150,7 +152,7 @@ module.exports = function(app) {
   };
 
   const cancelRequisition = (req, res, next) => {
-    
+
     if (req.requisitionId.status === app.config.contentManagement.requisitionStatus.approved) {
       return next({
         'errCode': 'REQUISITION_ALREADY_APPROVED'
@@ -185,7 +187,7 @@ module.exports = function(app) {
   };
 
   const approveRejectRequisition = (req, res, next) => {
-    
+
     if (req.requisitionId.status === app.config.contentManagement.requisitionStatus.approved) {
       return next({
         'errCode': 'REQUISITION_ALREADY_APPROVED'
@@ -208,6 +210,7 @@ module.exports = function(app) {
 
     if (Object.keys(req.body).length) {
       req.requisitionId.status = req.body.status;
+      req.requisitionId.cart = req.body.cart || req.requisitionId.cart;
 
       req.requisitionId.history.push({
         status: req.body.status,
@@ -219,10 +222,74 @@ module.exports = function(app) {
 
     requisition.edit(req.requisitionId, req.session.user)
       .then(output => {
+        if (req.body.status === app.config.contentManagement.requisitionStatus.approved) {
+          inventory.updateInventoryCountForRequisition(req.requisitionId.cart, req.requisitionId._id, req.session.user)
+            .then(() => {
+              req.workflow.outcome.data = output;
+              req.workflow.emit('response');
+            })
+            .catch(next);
+        } else {
+          req.workflow.outcome.data = output;
+          req.workflow.emit('response');
+        }
+      })
+      .catch(next);
+  };
+
+  const createRequisitionOrder = (req, res, next) => {
+
+    if (req.requisitionId.status !== app.config.contentManagement.requisitionStatus.approved) {
+      return next({
+        'errCode': 'REQUISITION_ORDER_CREATION_NOT_ALLOWED'
+      });
+    }
+
+    requisitionOrder.create({
+      requisitionId: req.requisitionId._id,
+      requestedByRestaurantRef: req.requisitionId.requestedByRestaurantRef,
+      requestedToRestaurantRef: req.requisitionId.requestedToRestaurantRef,
+      requestedBy: req.requisitionId.requestedBy,
+      history: [{
+        status: app.config.contentManagement.requisitionOrderStatus.active,
+        updatedBy: req.session.user._id,
+        remarks: 'REQUISITION_ORDER_CREATED'
+      }],
+    })
+      .then(output => {
         req.workflow.outcome.data = output;
         req.workflow.emit('response');
       })
       .catch(next);
+  };
+
+  const requisitionOrderDelivered = async (req, res, next) => {
+    try {
+      req.orderId.status = app.config.contentManagement.requisitionOrderStatus.delivered;
+
+      req.orderId.history.push({
+        status: app.config.contentManagement.requisitionOrderStatus.delivered,
+        updatedBy: req.session.user._id,
+        remarks: 'REQUISITION_ORDER_DELIVERED',
+        comments: req.body.comments
+      });
+
+      await requisitionOrder.edit(req.orderId, req.session.user);
+
+      const restaurantDetails = await restaurant.get(req.orderId.requestedByRestaurantRef);
+      const requisitionDetails = await requisition.get(req.orderId.requisitionId);
+
+      await inventory.addInventoryCountForRequisition(
+        requisitionDetails.cart,
+        requisitionDetails._id,
+        restaurantDetails,
+        req.session.user
+      );
+
+      req.workflow.emit('response');
+    } catch (error) {
+      next(error); // ✅ this is critical
+    }
   };
 
   /**
@@ -248,7 +315,9 @@ module.exports = function(app) {
     list: getRequisitionList,
     delete: deleteRequisition,
     cancelRequisition: cancelRequisition,
-    approveRejectRequisition: approveRejectRequisition
+    approveRejectRequisition: approveRejectRequisition,
+    createRequisitionOrder: createRequisitionOrder,
+    requisitionOrderDelivered: requisitionOrderDelivered
   };
 
 };

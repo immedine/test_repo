@@ -5,6 +5,10 @@ module.exports = function (app, mongoose) {
       type: String,
       required: true
     },
+    name_lower: {
+      type: String,
+      lowercase: true
+    },
     preCode: {
       type: String
     },
@@ -100,6 +104,10 @@ module.exports = function (app, mongoose) {
           type: mongoose.Schema.Types.ObjectId,
           ref: 'Order',
         },
+        requisitionRef: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Requisition',
+        },
         expenseRef: {
           type: mongoose.Schema.Types.ObjectId,
           ref: 'Expense',
@@ -132,7 +140,8 @@ module.exports = function (app, mongoose) {
    */
   schema.statics.createInventory = function (data) {
     const { name, restaurantRef } = data;
-    return this.exist(name, restaurantRef)
+    data.name_lower = name.toLowerCase();
+    return this.exist(data.name_lower, restaurantRef)
       .then((doc) => doc ? Promise.reject({
         'errCode': 'INVENTORY_ALREADY_EXISTS'
       }) : (new this(data)).save());
@@ -143,9 +152,9 @@ module.exports = function (app, mongoose) {
    * @param  {String} name name of the inventory
    * @return {Promise}
    */
-  schema.statics.exist = function (name, restaurantRef) {
+  schema.statics.exist = function (name_lower, restaurantRef) {
     return this.countDocuments({
-      name: name,
+      name_lower: name_lower,
       status: app.config.contentManagement.inventory.active,
       restaurantRef: restaurantRef
     }).exec();

@@ -60,8 +60,10 @@ module.exports = function (app) {
       });
     }
 
+    editedInventory.name_lower = editedInventory.name.toLowerCase();
+
     return Inventory.countDocuments({
-      name: editedInventory.name,
+      name_lower: editedInventory.name_lower,
       status: app.config.contentManagement.inventory.active,
       restaurantRef: editedInventory.restaurantRef,
       _id: {
@@ -1001,6 +1003,7 @@ module.exports = function (app) {
           const newCat = {
             _id: new mongoose.Types.ObjectId(),
             name: cat.name,
+            name_lower: cat.name.toLowerCase(),
             code: cat.name
           };
           newCategories.push(newCat);
@@ -1029,6 +1032,7 @@ module.exports = function (app) {
 
         const obj = {
           name: item.name,
+          name_lower: item.name.toLowerCase(),
           restaurantRef: restaurantId,
           isDefault: true,
           preCode: `${item.categoryName.slice(0, 3).replaceAll(' ', '')}`,
@@ -1047,7 +1051,7 @@ module.exports = function (app) {
         bulkOps.push({
           updateOne: {
             filter: {
-              name: item.name,
+              name_lower: item.name.toLowerCase(),
               restaurantRef: restaurantId
             },
             update: {
@@ -1288,6 +1292,270 @@ module.exports = function (app) {
     }
   };
 
+  const updateInventoryCountForRequisition = async (orderItems, requisitionRef, userData) => {
+    const session = await app.db.startSession();
+    session.startTransaction();
+
+    try {
+      // Prepare a map for bulk updates
+      const bulkUpdates = [];
+      const invIds = [];
+
+
+      for (const ing of orderItems) {
+        ing.inventoryRef = await Inventory.findById(ing.inventoryRef).session(session);
+        if (ing.inventoryRef) {
+          if (requisitionRef) {
+            let requiredQty = ing.approvedQuantity || 0;
+
+            // console.log("orderItem ", orderItem)
+
+            const historyEntry = {
+              quantity: requiredQty,
+              isDebited: true,
+              reason: 'NEW_REQUISITION_ORDER',
+              prevLocQuantity: ing.inventoryRef.locationList &&
+                ing.inventoryRef.locationList.length ? ing.inventoryRef.locationList.find(loc => loc.location.toString() === ing.location.toString())?.quantity : 0,
+              prevTotalQuantity: ing.inventoryRef.quantity || 0,
+              userRef: userData._id,
+              userName: userData.personalInfo?.fullName
+            };
+
+            if (requisitionRef) {
+              historyEntry.requisitionRef = requisitionRef;
+            }
+
+            const updateObj = {
+              $inc: { 'locationList.$[loc].quantity': -requiredQty, quantity: -requiredQty },
+            }
+
+            if (requisitionRef) {
+              updateObj["$push"] = { 'locationList.$[loc].history': historyEntry }
+            }
+
+            invIds.push(ing.inventoryRef._id.toString());
+
+            // console.log("updateObj ", updateObj)
+
+            // Push to bulk update list
+            bulkUpdates.push({
+              updateOne: {
+                filter: { _id: new mongoose.Types.ObjectId(ing.inventoryRef._id) },
+                update: updateObj,
+                arrayFilters: [{ 'loc.location': new mongoose.Types.ObjectId(ing.location) }]
+              }
+            });
+          }
+
+        }
+
+      }
+
+
+      if (bulkUpdates.length > 0) {
+        await Inventory.bulkWrite(bulkUpdates, { session });
+      }
+
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return Promise.resolve({ success: true, message: "Order placed & inventory updated", invIds: invIds });
+
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      return Promise.reject({ success: false, error: err.message });
+    }
+  };
+
+  // const addInventoryCountForRequisition = async (orderItems, requisitionRef, restaurantDetails, userData) => {
+  //   const session = await app.db.startSession();
+  //   session.startTransaction();
+
+  //   try {
+  //     // Prepare a map for bulk updates
+  //     const bulkUpdates = [];
+  //     const invIds = [];
+
+  //     for (const ing of orderItems) {
+  //       ing.inventoryRef = await Inventory.findById(ing.inventoryRef).session(session);
+  //       if (ing.inventoryRef) {
+  //         if (requisitionRef) {
+  //           let requiredQty = ing.approvedQuantity || 0;
+
+  //           // Check if inventory exists with case-insensitive name and restaurantRef
+  //           const existingInventory = await Inventory.findOne({
+  //             name: { $regex: `^${ing.inventoryRef.name}$`, $options: "i" },
+  //             restaurantRef: restaurantDetails._id.toString()
+  //           }).session(session);
+
+  //           if (!existingInventory) {
+  //             // Create new inventory if not found
+  //             const newInventory = new Inventory({
+  //               name: ing.inventoryRef.name,
+  //               restaurantRef: restaurantDetails._id.toString(),
+  //               quantity: requiredQty,
+  //               locationList: [{
+  //                 location: restaurantDetails.inventoryLocations[0]._id,
+  //                 quantity: requiredQty,
+  //                 history: [{
+  //                   quantity: requiredQty,
+  //                   isDebited: false,
+  //                   reason: 'NEW_REQUISITION_ORDER',
+  //                   prevLocQuantity: 0,
+  //                   prevTotalQuantity: 0,
+  //                   userRef: userData._id,
+  //                   userName: userData.personalInfo?.fullName,
+  //                   requisitionRef: requisitionRef
+  //                 }]
+  //               }]
+  //             });
+  //             await newInventory.save({ session });
+  //             // ing.inventoryRef = newInventory;
+  //           } else {
+  //             // If inventory exists, use its ID for updates
+
+  //             existingInventory.locationList[0].history.push({
+  //               quantity: requiredQty,
+  //               isDebited: false,
+  //               reason: 'NEW_REQUISITION_ORDER',
+  //               prevLocQuantity: existingInventory.locationList[0].quantity,
+  //               prevTotalQuantity: existingInventory.quantity,
+  //               userRef: userData._id,
+  //               userName: userData.personalInfo?.fullName,
+  //               requisitionRef: requisitionRef
+  //             });
+  //             existingInventory.quantity += requiredQty;
+  //             existingInventory.locationList[0].quantity += requiredQty;
+
+  //             await existingInventory.save({ session });
+  //           }
+  //         }
+
+  //       }
+
+  //     }
+
+  //     await session.commitTransaction();
+  //     session.endSession();
+
+  //     return Promise.resolve({ success: true, message: "Req Order placed & inventory updated" });
+
+  //   } catch (err) {
+  //     await session.abortTransaction();
+  //     session.endSession();
+  //     return Promise.reject({ success: false, error: err.message });
+  //   }
+  // };
+
+  const addInventoryCountForRequisition = async (orderItems, requisitionRef, restaurantDetails, userData) => {
+    const session = await app.db.startSession();
+    session.startTransaction();
+
+    try {
+      const locationId = restaurantDetails.inventoryLocations[0]._id;
+
+      // 🔥 1. Preload all inventory refs in ONE query
+      const invDocs = await Inventory.find({
+        _id: { $in: orderItems.map(i => i.inventoryRef) }
+      }).session(session);
+
+      const invMap = {};
+      invDocs.forEach(doc => {
+        invMap[doc._id.toString()] = doc;
+      });
+
+      // 🔥 2. Preload existing inventories (by name + restaurant)
+      const names = invDocs.map(d => d.name.toLowerCase());
+
+      const existing = await Inventory.find({
+        name_lower: { $in: names },
+        restaurantRef: restaurantDetails._id
+      }).session(session);
+
+      const existingMap = {};
+      existing.forEach(doc => {
+        existingMap[doc.name_lower] = doc;
+      });
+
+      const updateOps = [];
+      const insertDocs = [];
+
+      for (const ing of orderItems) {
+        const invDoc = invMap[ing.inventoryRef.toString()];
+        if (!invDoc) continue;
+
+        const requiredQty = ing.approvedQuantity || 0;
+        const nameLower = invDoc.name.toLowerCase();
+
+        const historyEntry = {
+          quantity: requiredQty,
+          isDebited: false,
+          reason: 'NEW_REQUISITION_ORDER',
+          prevLocQuantity: 0,
+          prevTotalQuantity: 0,
+          userRef: userData._id,
+          userName: userData.personalInfo?.fullName,
+          requisitionRef
+        };
+
+        if (existingMap[nameLower]) {
+          // ✅ UPDATE
+          updateOps.push({
+            updateOne: {
+              filter: { _id: existingMap[nameLower]._id },
+              update: {
+                $inc: {
+                  quantity: requiredQty,
+                  'locationList.$[loc].quantity': requiredQty
+                },
+                $push: {
+                  'locationList.$[loc].history': historyEntry
+                }
+              },
+              arrayFilters: [{ 'loc.location': locationId }]
+            }
+          });
+        } else {
+          // ✅ INSERT
+          insertDocs.push({
+            name: invDoc.name,
+            name_lower: nameLower,
+            restaurantRef: restaurantDetails._id,
+            quantity: requiredQty,
+            locationList: [{
+              location: locationId,
+              quantity: requiredQty,
+              history: [historyEntry]
+            }]
+          });
+        }
+      }
+
+      // 🔥 3. Execute in BULK (only 2 DB calls total)
+
+      if (updateOps.length) {
+        await Inventory.bulkWrite(updateOps, { session });
+      }
+
+      if (insertDocs.length) {
+        await Inventory.insertMany(insertDocs, { session });
+      }
+
+      await session.commitTransaction();
+      session.endSession();
+
+      return { success: true };
+
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      console.error(err);
+      throw err;
+    }
+  };
+
   return {
     'create': createInventory,
     'get': findInventoryById,
@@ -1302,6 +1570,8 @@ module.exports = function (app) {
     updateInventoryWithPurchase: updateInventoryWithPurchase,
     seedInventoryForRestaurant: seedInventoryForRestaurant,
     downloadReport: downloadReport,
-    getCount: getInventoryCount
+    getCount: getInventoryCount,
+    updateInventoryCountForRequisition: updateInventoryCountForRequisition,
+    addInventoryCountForRequisition: addInventoryCountForRequisition
   };
 };

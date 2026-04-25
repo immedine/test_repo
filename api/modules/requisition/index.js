@@ -30,8 +30,7 @@ module.exports = function (app) {
   const findRequisitionById = function (requisitionId, userRef) {
     return Requisition.findById(requisitionId)
     .then(requisitionDetails => {
-      if(!requisitionDetails || (requisitionDetails && 
-        requisitionDetails.requestedByRestaurantRef.toString() !== userRef.restaurantRef.toString())) {
+      if(!requisitionDetails) {
         return Promise.reject({
           'errCode': 'REQUISITION_NOT_FOUND'
         });
