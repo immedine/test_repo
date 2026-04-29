@@ -38,6 +38,8 @@ module.exports = function (app, options) {
    * Custom Login
    */
   router.post('/login', [options.validateBody(schemaValidator.login), controllers.login]);
+  router.post('/multi-login', [options.validateBody(schemaValidator.login), controllers.multiRoleLogin]);
+  router.post('/login-with-restaurant', [options.validateBody(schemaValidator.loginWithRestaurant), controllers.loginWithRestaurant]);
   router.post('/register-device', [options.validateBody(schemaValidator.registerDevice), controllers.registerDevice]);
 
   /**
@@ -57,6 +59,8 @@ module.exports = function (app, options) {
   ]);
 
   router.post('/social-login', [options.validateBody(schemaValidator.socialLogin), controllers.socialLogin]);
+  router.post('/multi-social-login', [options.validateBody(schemaValidator.socialLogin), controllers.multiSocialLogin]);
+  router.post('/social-login-with-restaurant', [options.validateBody(schemaValidator.socialLoginWithRestaurant), controllers.socialLoginWithRestaurant]);
 
   router.post('/send-verification-link', [options.validateBody(schemaValidator.sendVerificationLink), controllers.sendVerificationLink]);
 

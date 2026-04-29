@@ -30,6 +30,7 @@ module.exports = function (/*app*/) {
     TOKEN_INVALID: 1007,
     TOKEN_TIMEDOUT: 1008,
     INVALID_PIN: 1009,
+    INVALID_SOCIAL_TOKEN: 1010,
 
     ////////////
     // ADMIN  //

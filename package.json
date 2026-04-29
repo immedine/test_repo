@@ -55,6 +55,7 @@
     "fcm-node": "^1.6.1",
     "firebase-admin": "^13.3.0",
     "fs-extra": "*",
+    "google-auth-library": "^10.6.2",
     "gpxparser": "^3.0.8",
     "helmet": "^7.1.0",
     "html-pdf": "^1.5.0",

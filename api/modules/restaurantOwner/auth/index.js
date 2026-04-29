@@ -31,6 +31,39 @@ module.exports = function (app) {
     });
   };
 
+  const multiRoleLogin = function (headerData, loginData) {
+    return RestaurantOwner.multiLoginValidate(loginData.email, loginData.password).then((output) => {
+      return Promise.resolve(output);
+    });
+  };
+
+  const loginWithRestaurant = function (headerData, loginData) {
+    return RestaurantOwner.loginWithRestaurantValidate(loginData.email, loginData.password, loginData.restaurantId).then((output) => {
+      return Promise.resolve(output);
+    });
+  };
+
+  const socialLoginWithRestaurant = function (loginData) {
+    return RestaurantOwner.socialLoginWithRestaurantValidate(
+      loginData.socialId,
+      loginData.socialType,
+      loginData.fullName,
+      loginData.email,
+      loginData.restaurantId
+    ).then((output) => {
+      if (output.message && output.message === "NEW_REGISTER") {
+        return Promise.resolve(output);
+      }
+      return Promise.resolve(output);
+    });
+  }
+
+  const changeRestaurant = function (headerData, loginData) {
+    return RestaurantOwner.changeRestaurantValidate(loginData.email,  loginData.restaurantId).then((output) => {
+      return Promise.resolve(output);
+    });
+  };
+
   const registerDevice = function (headerData, loginData) {
     return RestaurantOwner.registerDevice(loginData, headerData).then((output) => {
       if (output.userDoc.accountStatus === app.config.user.accountStatus.restaurantOwner.blocked) {
@@ -75,11 +108,21 @@ module.exports = function (app) {
       if (output.message && output.message === "NEW_REGISTER") {
         return Promise.resolve(output);
       }
-      if (output.userDoc.accountStatus === app.config.user.accountStatus.restaurantOwner.blocked) {
-        return Promise.reject({ errCode: 'RESTAURANT_OWNER_BLOCKED' });
-      } else {
+      return Promise.resolve(output);
+    });
+  }
+
+  const multiSocialLogin = function (loginData) {
+    return RestaurantOwner.multiSocialLoginValidate(
+      loginData.socialId,
+      loginData.socialType,
+      loginData.fullName,
+      loginData.email
+    ).then((output) => {
+      if (output.message && output.message === "NEW_REGISTER") {
         return Promise.resolve(output);
       }
+      return Promise.resolve(output);
     });
   }
 
@@ -89,9 +132,14 @@ module.exports = function (app) {
 
   return {
     login: login,
+    multiRoleLogin: multiRoleLogin,
+    loginWithRestaurant: loginWithRestaurant,
+    socialLoginWithRestaurant,
+    changeRestaurant: changeRestaurant,
     registerDevice: registerDevice,
     verifyToken: verifyToken,
     socialLogin,
+    multiSocialLogin,
     forgotPassword: {
       create: forgotPasswordCreateOTP,
       verify: forgotPasswordVerifyOTP,

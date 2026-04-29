@@ -39,6 +39,7 @@ module.exports = function (app, options) {
   router.put('/logout', controllers.logout);
   router.put('/generate-pin', controllers.generatePin);
   router.put('/verify-pin', [options.validateBody(schemaValidator.verifyPin), controllers.verifyPin]);
+   router.post('/change-restaurant', [options.validateBody(schemaValidator.changeRestaurant), controllers.changeRestaurant]);
 
   /**
    * Profile

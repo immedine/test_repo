@@ -7,6 +7,18 @@ module.exports = function (app) {
     },
   };
 
+  
+  const changeRestaurant = {
+    restaurantId: {
+      type: 'string',
+      required: true,
+      allowEmpty: false,
+      'conform': function(value) {
+        return app.utility.checkMongooseObjectId(value);
+      }
+    }
+  }
+
   /////////////
   // Profile //
   /////////////
@@ -59,6 +71,7 @@ module.exports = function (app) {
     profilePhoto: profilePhoto,
     set: setProfile,
     changePassword: changePassword,
-    verifyPin: verifyPin
+    verifyPin: verifyPin,
+    changeRestaurant: changeRestaurant
   };
 };

@@ -3,7 +3,7 @@
 # ===== CONFIG =====
 MONGO_URI="mongodb+srv://Immedine:Immedine2025@cluster0.lojpvhk.mongodb.net/dev"
 DB_NAME="dev"
-S3_BUCKET="s3://immedine-bucket"
+S3_BUCKET="s3://immedine-bucket-2/mongo-backups"
 BACKUP_DIR="/tmp/mongo-backup"
 
 DATE=$(date +"%Y-%m-%d_%H-%M-%S")

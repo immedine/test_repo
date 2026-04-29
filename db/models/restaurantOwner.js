@@ -314,7 +314,7 @@ module.exports = function (app, mongoose /*, plugins*/) {
             errCode: 'RESTAURANT_OWNER_HAS_BEEN_SUSPENDED',
           })
       )
-      .then((restaurantOwnerDoc) =>{
+      .then((restaurantOwnerDoc) => {
         if (restaurantOwnerDoc.isFranchise && !restaurantOwnerDoc.isDeviceRegistered) {
           return Promise.reject({
             errCode: 'DEVICE_NOT_REGISTERED',
@@ -342,6 +342,220 @@ module.exports = function (app, mongoose /*, plugins*/) {
       });
   };
 
+  restaurantOwnerSchema.statics.loginWithRestaurantValidate = function (email, password, restaurantId) {
+    return this.findOne({
+      'personalInfo.email': email,
+      'restaurantRef': restaurantId,
+      accountStatus: {
+        $ne: app.config.user.accountStatus.restaurantOwner.deleted,
+      },
+    })
+      .populate('restaurantRef')
+      .populate('roleInfo.roleId')
+      .exec()
+      .then((restaurantOwnerDoc) =>
+        restaurantOwnerDoc
+          ? Promise.resolve(restaurantOwnerDoc)
+          : Promise.reject({
+            errCode: 'RESTAURANT_OWNER_NOT_FOUND',
+          })
+      )
+      .then((restaurantOwnerDoc) => {
+        if (restaurantOwnerDoc.authenticationInfo.password) {
+          return app.utility.validatePassword(password, restaurantOwnerDoc.authenticationInfo.password).then((result) =>
+            result
+              ? Promise.resolve(restaurantOwnerDoc)
+              : Promise.reject({
+                errCode: 'PASSWORD_MISMATCH',
+              })
+          )
+        } else {
+          return Promise.reject({
+            errCode: 'RESTAURANT_OWNER_IS_SOCIAL_REGISTERED',
+          });
+        }
+
+      })
+      .then((restaurantOwnerDoc) =>
+        restaurantOwnerDoc.accountStatus !== app.config.user.accountStatus.restaurantOwner.blocked
+          ? Promise.resolve(restaurantOwnerDoc)
+          : Promise.reject({
+            errCode: 'RESTAURANT_OWNER_HAS_BEEN_SUSPENDED',
+          })
+      )
+      .then((restaurantOwnerDoc) => {
+        if (restaurantOwnerDoc.isFranchise && !restaurantOwnerDoc.isDeviceRegistered) {
+          return Promise.reject({
+            errCode: 'DEVICE_NOT_REGISTERED',
+          })
+        } else {
+          return Promise.resolve(restaurantOwnerDoc)
+        }
+      })
+      .then((restaurantOwnerDoc) => {
+        return Promise.resolve({
+          userDoc: restaurantOwnerDoc,
+          userType: app.config.user.role.restaurantOwner,
+        });
+      });
+  };
+
+  restaurantOwnerSchema.statics.socialLoginWithRestaurantValidate = async function (socialId, socialType, fullName, email, restaurantId) {
+    let userDoc = await this.findOne({ 'personalInfo.email': email, 'restaurantRef': restaurantId })
+      .populate('restaurantRef')
+      .populate('roleInfo.roleId')
+      .exec();
+
+    if (userDoc) {
+      if (userDoc.accountStatus === app.config.user.accountStatus.restaurantOwner.deleted) {
+        return Promise.reject({ errCode: 'RESTAURANT_OWNER_DELETED' });
+      }
+      if (userDoc.accountStatus === app.config.user.accountStatus.restaurantOwner.blocked) {
+        return Promise.reject({ errCode: 'RESTAURANT_OWNER_BLOCKED' });
+      }
+      if (userDoc.isFranchise && !userDoc.isDeviceRegistered) {
+        return Promise.reject({
+          errCode: 'DEVICE_NOT_REGISTERED',
+        })
+      }
+
+      const exists = userDoc.socialInfo.some(
+        (s) => s.socialId === socialId && s.socialType === socialType
+      );
+      const socialExists = userDoc.socialInfo.filter(
+        (s) => s.socialType === socialType
+      )[0];
+
+      if (socialExists && socialExists.socialId && socialExists.socialId !== socialId) {
+        return Promise.reject({ errCode: 'RESTAURANT_OWNER_ALREADY_REGISTERED_DIFFERENT_SOCIAL_ACCOUNT' });
+      }
+
+      if (!exists) {
+        userDoc.socialInfo.push({ socialId, socialType });
+      }
+
+      userDoc.loginType = app.config.user.loginType[socialType];
+      userDoc.accountStatus = app.config.user.accountStatus.restaurantOwner.active;
+
+      await userDoc.save();
+      return {
+        userDoc,
+        userType: app.config.user.role.restaurantOwner,
+      };
+
+    } else {
+      return {
+        message: 'NEW_REGISTER'
+      };
+    }
+
+
+  };
+
+  restaurantOwnerSchema.statics.changeRestaurantValidate = function (email, restaurantId) {
+    return this.findOne({
+      'personalInfo.email': email,
+      'restaurantRef': restaurantId,
+      accountStatus: {
+        $ne: app.config.user.accountStatus.restaurantOwner.deleted,
+      },
+    })
+      .populate('restaurantRef')
+      .populate('roleInfo.roleId')
+      .exec()
+      .then((restaurantOwnerDoc) =>
+        restaurantOwnerDoc
+          ? Promise.resolve(restaurantOwnerDoc)
+          : Promise.reject({
+            errCode: 'RESTAURANT_OWNER_NOT_FOUND',
+          })
+      )
+      .then((restaurantOwnerDoc) =>
+        restaurantOwnerDoc.accountStatus !== app.config.user.accountStatus.restaurantOwner.blocked
+          ? Promise.resolve(restaurantOwnerDoc)
+          : Promise.reject({
+            errCode: 'RESTAURANT_OWNER_HAS_BEEN_SUSPENDED',
+          })
+      )
+      .then((restaurantOwnerDoc) => {
+        if (restaurantOwnerDoc.isFranchise && !restaurantOwnerDoc.isDeviceRegistered) {
+          return Promise.reject({
+            errCode: 'DEVICE_NOT_REGISTERED',
+          })
+        } else {
+          return Promise.resolve(restaurantOwnerDoc)
+        }
+      })
+      .then((restaurantOwnerDoc) => {
+        return Promise.resolve({
+          userDoc: restaurantOwnerDoc,
+          userType: app.config.user.role.restaurantOwner,
+        });
+      });
+  };
+
+  restaurantOwnerSchema.statics.multiLoginValidate = function (email, password) {
+    return this.find({
+      'personalInfo.email': email,
+      accountStatus: {
+        $ne: app.config.user.accountStatus.restaurantOwner.deleted,
+      },
+    })
+      .populate('restaurantRef')
+      .populate('roleInfo.roleId')
+      .exec()
+      .then((restaurantOwnerDocs) =>
+        restaurantOwnerDocs?.length
+          ? Promise.resolve(restaurantOwnerDocs)
+          : Promise.reject({
+            errCode: 'RESTAURANT_OWNER_NOT_FOUND',
+          })
+      )
+      .then((restaurantOwnerDocs) => {
+        if (restaurantOwnerDocs[0].authenticationInfo.password) {
+          return app.utility.validatePassword(password, restaurantOwnerDocs[0].authenticationInfo.password).then((result) =>
+            result
+              ? Promise.resolve(restaurantOwnerDocs)
+              : Promise.reject({
+                errCode: 'PASSWORD_MISMATCH',
+              })
+          )
+        } else {
+          return Promise.reject({
+            errCode: 'RESTAURANT_OWNER_IS_SOCIAL_REGISTERED',
+          });
+        }
+
+      })
+      .then((restaurantOwnerDocs) => {
+        const docs = restaurantOwnerDocs.filter(doc => doc.accountStatus !== app.config.user.accountStatus.restaurantOwner.blocked);
+        if (!docs.length) {
+          return Promise.reject({
+            errCode: 'RESTAURANT_OWNER_HAS_BEEN_SUSPENDED',
+          })
+        } else {
+          return Promise.resolve(docs);
+        }
+
+      })
+      .then((restaurantOwnerDocs) => {
+        const restaurantOwnerDoc = restaurantOwnerDocs[0];
+        if (restaurantOwnerDocs.length === 1 && restaurantOwnerDoc.isFranchise && !restaurantOwnerDoc.isDeviceRegistered) {
+          return Promise.reject({
+            errCode: 'DEVICE_NOT_REGISTERED',
+          })
+        } else {
+          return Promise.resolve(restaurantOwnerDocs)
+        }
+      })
+      .then((restaurantOwnerDocs) => {
+        return Promise.resolve({
+          userDocs: restaurantOwnerDocs,
+          userType: app.config.user.role.restaurantOwner,
+        });
+      });
+  };
+
   restaurantOwnerSchema.statics.registerDevice = function (loginData, headerData) {
     return this.findOne({
       'personalInfo.email': loginData.email,
@@ -364,7 +578,7 @@ module.exports = function (app, mongoose /*, plugins*/) {
             errCode: 'RESTAURANT_OWNER_HAS_BEEN_SUSPENDED',
           })
       )
-      .then(async (restaurantOwnerDoc) =>{
+      .then(async (restaurantOwnerDoc) => {
         if (restaurantOwnerDoc.deviceRegistrationCode !== loginData.deviceRegistrationCode) {
           restaurantOwnerDoc.deviceRegistrationAttempt = restaurantOwnerDoc.deviceRegistrationAttempt ? ++restaurantOwnerDoc.deviceRegistrationAttempt : 1;
 
@@ -512,7 +726,11 @@ module.exports = function (app, mongoose /*, plugins*/) {
               }
             }
             return restaurantOwnerDoc.save().then((userDoc) => {
-              return Promise.resolve(userDoc);
+              userDoc = userDoc.toObject();
+              return Promise.resolve({
+                ...userDoc,
+                restaurantActive: true
+              });
             })
           }
         });
@@ -535,11 +753,11 @@ module.exports = function (app, mongoose /*, plugins*/) {
       if (userDoc.accountStatus === app.config.user.accountStatus.restaurantOwner.blocked) {
         return Promise.reject({ errCode: 'RESTAURANT_OWNER_BLOCKED' });
       }
-       if (userDoc.isFranchise && !userDoc.isDeviceRegistered) {
-          return Promise.reject({
-            errCode: 'DEVICE_NOT_REGISTERED',
-          })
-        }
+      if (userDoc.isFranchise && !userDoc.isDeviceRegistered) {
+        return Promise.reject({
+          errCode: 'DEVICE_NOT_REGISTERED',
+        })
+      }
 
       const exists = userDoc.socialInfo.some(
         (s) => s.socialId === socialId && s.socialType === socialType
@@ -579,6 +797,66 @@ module.exports = function (app, mongoose /*, plugins*/) {
       //   loginType: app.config.user.loginType[socialType],
       //   accountStatus: app.config.user.accountStatus.restaurantOwner.active,
       // });
+    }
+
+
+  };
+
+  restaurantOwnerSchema.statics.multiSocialLoginValidate = async function (socialId, socialType, fullName, email) {
+    let userDocs = await this.find({ 'personalInfo.email': email })
+      .populate('restaurantRef')
+      .populate('roleInfo.roleId')
+      .exec();
+
+    if (userDocs && userDocs.length) {
+      let docs = userDocs.filter(doc => doc.accountStatus !== app.config.user.accountStatus.restaurantOwner.deleted);
+      if (!docs.length) {
+        return Promise.reject({ errCode: 'RESTAURANT_OWNER_DELETED' });
+      }
+      docs = userDocs.filter(doc => doc.accountStatus !== app.config.user.accountStatus.restaurantOwner.blocked);
+      if (!docs.length) {
+        return Promise.reject({ errCode: 'RESTAURANT_OWNER_BLOCKED' });
+      }
+      const userDoc = userDocs[0];
+      if (userDocs.length === 1 && userDoc.isFranchise && !userDoc.isDeviceRegistered) {
+        return Promise.reject({
+          errCode: 'DEVICE_NOT_REGISTERED',
+        })
+      }
+
+      // Collect all social IDs and types
+      let socialIds = [];
+      let socialTypes = [];
+
+      for (let i = 0; i < userDocs.length; i++) {
+        const doc = userDocs[i];
+        socialIds = socialIds.concat(doc.socialInfo.map(s => s.socialId));
+        socialTypes = socialTypes.concat(doc.socialInfo.map(s => s.socialType));
+
+      }
+
+      if (socialTypes.includes(socialType) && socialIds[socialTypes.indexOf(socialType)] !== socialId) {
+        return Promise.reject({ errCode: 'RESTAURANT_OWNER_ALREADY_REGISTERED_DIFFERENT_SOCIAL_ACCOUNT' });
+      }
+
+      if (!socialTypes.includes(socialType) && !socialIds.includes(socialId)) {
+        for (let i = 0; i < userDocs.length; i++) {
+          const doc = userDocs[i];
+          doc.socialInfo.push({ socialId, socialType });
+          doc.loginType = app.config.user.loginType[socialType];
+          doc.accountStatus = app.config.user.accountStatus.restaurantOwner.active;
+          await doc.save();
+        }
+      }
+      return {
+        userDocs,
+        userType: app.config.user.role.restaurantOwner,
+      };
+
+    } else {
+      return {
+        message: 'NEW_REGISTER'
+      };
     }
 
 
@@ -687,7 +965,31 @@ module.exports = function (app, mongoose /*, plugins*/) {
       }
       )
       .then(() => {
+        return this.findOne({
+          'personalInfo.email': restaurantOwnerObj.personalInfo.email,
+          accountStatus: {
+            $ne: app.config.user.accountStatus.restaurantOwner.deleted,
+          },
+        }).then(userData => {
+          if (userData) {
+            return Promise.resolve(userData);
+          } else {
+            return Promise.resolve(false);
+          }
+        });
+      })
+      .then((userData) => {
         if (restaurantOwnerObj.from !== "signup") {
+          if (userData) {
+            restaurantOwnerObj.authenticationInfo = {
+              password: userData.authenticationInfo.password,
+            };
+            restaurantOwnerObj.socialInfo = userData.socialInfo;
+            restaurantOwnerObj.loginType = userData.loginType;
+            return new this(restaurantOwnerObj).save().then((user) => {
+              return Promise.resolve({ user, skip: true });
+            });
+          }
           let password = app.utility.getRandomCode(8, true);
           // let password = process.env.RESTAURANT_OWNER_DEFAULT_PASSWORD;
           return app.utility
@@ -744,51 +1046,62 @@ module.exports = function (app, mongoose /*, plugins*/) {
               return Promise.resolve(user);
             });
           } else {
-            return app.utility.encryptPassword(restaurantOwnerObj.personalInfo.password).then((encryptedPassword) => {
-              return Promise.resolve({
-                password: encryptedPassword,
+            if (userData) {
+              restaurantOwnerObj.authenticationInfo = {
+                password: userData.authenticationInfo.password,
+              };
+              restaurantOwnerObj.socialInfo = userData.socialInfo;
+              restaurantOwnerObj.loginType = userData.loginType;
+              return new this(restaurantOwnerObj).save().then((user) => {
+                return Promise.resolve({ user, skip: true });
               });
-            })
-              .then(({ password }) => {
-                restaurantOwnerObj.authenticationInfo = {
-                  password,
-                  link: {
-                    token: app.utility.getRandomCode(20),
-                    timeout: new Date(new Date().getTime() + 10 * 60 * 1000),
-                  }
-                };
-
-                return new this(restaurantOwnerObj).save().then((user) => {
-                  let emailNotification = app.config.notification.email(app, app.config.lang.defaultLanguage),
-                    multilangConfig = app.config.lang[app.config.lang.defaultLanguage];
-                  // create email template
-                  app.render(
-                    emailNotification.userSignupRequest.pageName,
-                    {
-                      greeting: multilangConfig.email.userSignupRequest.greeting,
-                      firstName: user.personalInfo.fullName,
-                      message: multilangConfig.email.userSignupRequest.message,
-                      verificationLink: `https://immedine.com/auth/verify-token?token=${user.authenticationInfo.link.token}&type=register`,
-                      note: multilangConfig.email.userSignupRequest.note
-                    },
-                    function (err, renderedText) {
-                      if (err) {
-                        console.log(err);
-                      } else {
-                        // send email
-                        app.service.notification.email.immediate({
-                          userId: user._id,
-                          userType: app.config.user.role.restaurantOwner,
-                          emailId: user.personalInfo.email,
-                          subject: emailNotification.userSignupRequest.subject,
-                          body: renderedText,
-                        });
-                      }
-                    }
-                  );
-                  return Promise.resolve(user);
+            } else {
+              return app.utility.encryptPassword(restaurantOwnerObj.personalInfo.password).then((encryptedPassword) => {
+                return Promise.resolve({
+                  password: encryptedPassword,
                 });
-              });
+              })
+                .then(({ password }) => {
+                  restaurantOwnerObj.authenticationInfo = {
+                    password,
+                    link: {
+                      token: app.utility.getRandomCode(20),
+                      timeout: new Date(new Date().getTime() + 10 * 60 * 1000),
+                    }
+                  };
+
+                  return new this(restaurantOwnerObj).save().then((user) => {
+                    let emailNotification = app.config.notification.email(app, app.config.lang.defaultLanguage),
+                      multilangConfig = app.config.lang[app.config.lang.defaultLanguage];
+                    // create email template
+                    app.render(
+                      emailNotification.userSignupRequest.pageName,
+                      {
+                        greeting: multilangConfig.email.userSignupRequest.greeting,
+                        firstName: user.personalInfo.fullName,
+                        message: multilangConfig.email.userSignupRequest.message,
+                        verificationLink: `https://immedine.com/auth/verify-token?token=${user.authenticationInfo.link.token}&type=register`,
+                        note: multilangConfig.email.userSignupRequest.note
+                      },
+                      function (err, renderedText) {
+                        if (err) {
+                          console.log(err);
+                        } else {
+                          // send email
+                          app.service.notification.email.immediate({
+                            userId: user._id,
+                            userType: app.config.user.role.restaurantOwner,
+                            emailId: user.personalInfo.email,
+                            subject: emailNotification.userSignupRequest.subject,
+                            body: renderedText,
+                          });
+                        }
+                      }
+                    );
+                    return Promise.resolve(user);
+                  });
+                });
+            }
           }
 
         }

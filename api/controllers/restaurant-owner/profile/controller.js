@@ -87,12 +87,68 @@ module.exports = function (app) {
     }
   };
 
+  const changeRestaurant = (req, res, next) => {
+    console.log("change restaurant req.body", req.headers, req.session.user);
+    // req.workflow.emit('response');
+    restaurantOwner.auth
+      .changeRestaurant(
+        {
+          deviceType: req.headers['x-auth-devicetype'],
+          deviceId: req.headers['x-auth-deviceid'],
+        },
+        {
+          email: req.session.user.personalInfo.email,
+          restaurantId: req.body.restaurantId
+        }
+      )
+      .then((output) => {
+        if (!output.userDoc.isFranchise) {
+          return Promise.resolve(output);
+        } else {
+          if (!output.userDoc.registeredDevice?.length) {
+            return Promise.reject({
+              errCode: 'DEVICE_NOT_REGISTERED',
+            })
+          } else {
+            const isRegisteredDevice = output.userDoc.registeredDevice.some(each => each.deviceId === req.headers['x-auth-deviceid'] && each.deviceType?.toString() === req.headers['x-auth-devicetype']?.toString());
+
+            if (isRegisteredDevice) {
+              return Promise.resolve(output);
+            } else {
+              return Promise.reject({
+                errCode: 'DEVICE_NOT_REGISTERED',
+              })
+            }
+          }
+        }
+      })
+      .then((output) =>
+        app.module.session.set(
+          output.userType,
+          output.userDoc,
+          req.headers['x-auth-devicetype'],
+          req.headers['x-auth-deviceid'],
+          req.headers['x-auth-notificationkey']
+        )
+      )
+      .then((output) => {
+        req.workflow.outcome.data = {
+          accessToken: output.accessToken,
+          refreshToken: output.refreshToken,
+          user: app.utility.format.user(output.userId),
+        };
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
   return {
     getProfile: getProfile,
     setProfile: setProfile,
     changePassword: changePassword,
     logout: logout,
     generatePin: generatePin,
-    verifyPin: verifyPin
+    verifyPin: verifyPin,
+    changeRestaurant: changeRestaurant
   };
 };
