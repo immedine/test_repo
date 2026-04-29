@@ -986,6 +986,7 @@ module.exports = function (app, mongoose /*, plugins*/) {
             };
             restaurantOwnerObj.socialInfo = userData.socialInfo;
             restaurantOwnerObj.loginType = userData.loginType;
+            restaurantOwnerObj.accountStatus = app.config.user.accountStatus.restaurantOwner.active;
             return new this(restaurantOwnerObj).save().then((user) => {
               return Promise.resolve({ user, skip: true });
             });
@@ -1052,6 +1053,7 @@ module.exports = function (app, mongoose /*, plugins*/) {
               };
               restaurantOwnerObj.socialInfo = userData.socialInfo;
               restaurantOwnerObj.loginType = userData.loginType;
+              restaurantOwnerObj.accountStatus = app.config.user.accountStatus.restaurantOwner.active;
               return new this(restaurantOwnerObj).save().then((user) => {
                 return Promise.resolve({ user, skip: true });
               });

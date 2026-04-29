@@ -371,8 +371,13 @@ module.exports = function (app) {
           data.accountStatus = app.config.user.accountStatus.restaurantOwner.active;
         }
         restaurantOwner.crud.add(data)
-          .then((output1) => {
+          .then(async (output1) => {
             if (output1.user) {
+              if (output1.skip) {
+                await restaurant.set(output._id, {
+                  status: app.config.contentManagement.restaurant.active
+                });
+              }
               req.workflow.outcome.data = {
                 user: app.utility.format.user(output1.user),
                 skip: output1.skip
