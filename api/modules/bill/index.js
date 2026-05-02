@@ -222,6 +222,37 @@ module.exports = function (app) {
       $facet: {
         totalCount: [{ $count: "count" }],
 
+        stats: [
+          {
+            $group: {
+              _id: null,
+              totalRevenue: { $sum: "$total" },
+              pendingCount: {
+                $sum: { $cond: [{ $eq: ["$paymentDetails.status", 1] }, 1, 0] }
+              },
+              pendingAmount: {
+                $sum: { $cond: [{ $eq: ["$paymentDetails.status", 1] }, "$total", 0] }
+              },
+              cancelledCount: {
+                $sum: { $cond: [{ $eq: ["$paymentDetails.status", 5] }, 1, 0] }
+              },
+              cancelledAmount: {
+                $sum: { $cond: [{ $eq: ["$paymentDetails.status", 5] }, "$total", 0] }
+              }
+            }
+          },
+          {
+            $project: {
+              _id: 0,
+              totalRevenue: 1,
+              pendingCount: 1,
+              pendingAmount: 1,
+              cancelledCount: 1,
+              cancelledAmount: 1
+            }
+          }
+        ],
+
         data: [
           {
             $project: options.select,
@@ -244,9 +275,15 @@ module.exports = function (app) {
     aggArr[aggArr.length - 1].$facet.data.push({ $limit: limit });
 
     const bills = await Bill.aggregate(aggArr).exec();
+    const stats = bills[0]?.stats?.[0] || {};
     return Promise.resolve({
       data: bills[0]?.data || [],
       total: bills[0]?.totalCount[0]?.count || 0,
+      totalRevenue: stats.totalRevenue || 0,
+      pendingCount: stats.pendingCount || 0,
+      pendingAmount: stats.pendingAmount || 0,
+      cancelledCount: stats.cancelledCount || 0,
+      cancelledAmount: stats.cancelledAmount || 0,
       limit: limit,
       skip: skip
     });

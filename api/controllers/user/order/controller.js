@@ -112,7 +112,7 @@ module.exports = function (app) {
                     moduleName: 'orders',
                     notificationType: "NEW_ORDER",
                     message: inAppNotification.toRestaurantOwner.newOrder.body(),
-                    redirectionId: output._id
+                    redirectionId: output.idbId
                   });
 
                   req.workflow.outcome.data = output;
