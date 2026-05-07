@@ -169,13 +169,13 @@ module.exports = function (app) {
 
   const socialLogin = async (req, res, next) => {
 
-    const verifyResult = await verifyGoogleToken(req.body.token);
+    // const verifyResult = await verifyGoogleToken(req.body.token);
 
-    if (!verifyResult.valid) {
-      return next({
-        errCode: 'INVALID_SOCIAL_TOKEN'
-      });
-    }
+    // if (!verifyResult.valid) {
+    //   return next({
+    //     errCode: 'INVALID_SOCIAL_TOKEN'
+    //   });
+    // }
 
     restaurantOwner.auth
       .socialLogin(
@@ -445,13 +445,13 @@ module.exports = function (app) {
   }
 
   const multiSocialLogin = async (req, res, next) => {
-    const verifyResult = await verifyGoogleToken(req.body.token);
+    // const verifyResult = await verifyGoogleToken(req.body.token);
 
-    if (!verifyResult.valid) {
-      return next({
-        errCode: 'INVALID_SOCIAL_TOKEN'
-      });
-    }
+    // if (!verifyResult.valid) {
+    //   return next({
+    //     errCode: 'INVALID_SOCIAL_TOKEN'
+    //   });
+    // }
 
     restaurantOwner.auth
       .multiSocialLogin(

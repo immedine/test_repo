@@ -226,18 +226,18 @@ module.exports = function (app) {
           {
             $group: {
               _id: null,
-              totalRevenue: { $sum: "$total" },
+              totalRevenue: { $sum: { $cond: [{ $eq: ["$paymentDetails.status", app.config.contentManagement.paymentStatus.paid] }, "$total", 0] } },
               pendingCount: {
-                $sum: { $cond: [{ $eq: ["$paymentDetails.status", 1] }, 1, 0] }
+                $sum: { $cond: [{ $eq: ["$paymentDetails.status", app.config.contentManagement.paymentStatus.pending] }, 1, 0] }
               },
               pendingAmount: {
-                $sum: { $cond: [{ $eq: ["$paymentDetails.status", 1] }, "$total", 0] }
+                $sum: { $cond: [{ $eq: ["$paymentDetails.status", app.config.contentManagement.paymentStatus.pending] }, "$total", 0] }
               },
               cancelledCount: {
-                $sum: { $cond: [{ $eq: ["$paymentDetails.status", 5] }, 1, 0] }
+                $sum: { $cond: [{ $eq: ["$paymentDetails.status", app.config.contentManagement.paymentStatus.cancelled] }, 1, 0] }
               },
               cancelledAmount: {
-                $sum: { $cond: [{ $eq: ["$paymentDetails.status", 5] }, "$total", 0] }
+                $sum: { $cond: [{ $eq: ["$paymentDetails.status", app.config.contentManagement.paymentStatus.cancelled] }, "$total", 0] }
               }
             }
           },
