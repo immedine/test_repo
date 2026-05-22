@@ -333,6 +333,20 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const forgotPasswordRequestOTPMulti = (req, res, next) => {
+    restaurantOwner.auth.forgotPassword
+      .createMulti(req.body.email)
+      .then((output) => {
+        if (process.env.NODE_ENV === 'testing' || process.env.NODE_ENV === 'development') {
+          req.workflow.outcome.data = {};
+          req.workflow.outcome.data.otp = output.code;
+        }
+
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
   /**
    * Forgot Password - Verify OTP
    * @param  {Object}   req  Request
@@ -343,6 +357,13 @@ module.exports = function (app) {
   const forgotPasswordVerifyOTP = (req, res, next) => {
     restaurantOwner.auth.forgotPassword
       .verify(req.body.token, req.body.password)
+      .then((output) => req.workflow.emit('response'))
+      .catch(next);
+  };
+
+  const forgotPasswordVerifyOTPMulti = (req, res, next) => {
+    restaurantOwner.auth.forgotPassword
+      .verifyMulti(req.body.token, req.body.password)
       .then((output) => req.workflow.emit('response'))
       .catch(next);
   };
@@ -533,6 +554,8 @@ module.exports = function (app) {
     forgotPassword: {
       requestOTP: forgotPasswordRequestOTP,
       verifyOTP: forgotPasswordVerifyOTP,
+      requestOTPMulti: forgotPasswordRequestOTPMulti,
+      verifyOTPMulti: forgotPasswordVerifyOTPMulti
     },
     socialLogin,
     multiSocialLogin,

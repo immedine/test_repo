@@ -23,6 +23,7 @@ module.exports = function(app) {
   const bill = require('./bill')(app);
   const inventory = require('./inventory')(app);
   const table = require('./table')(app);
+  const salesHistory = require('./salesHistory')(app);
   const sse = require('./sse')(app);
   const feedback = require('./feedback')(app);
   const vendor = require('./vendor')(app);
@@ -62,6 +63,7 @@ module.exports = function(app) {
     subscriptionPlan,
     subscription,
     requisition,
-    requisitionOrder
+    requisitionOrder,
+    salesHistory
   };
 };

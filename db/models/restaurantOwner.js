@@ -678,6 +678,74 @@ module.exports = function (app, mongoose /*, plugins*/) {
       });
   };
 
+  restaurantOwnerSchema.statics.forgotPasswordCreateOTPMulti = function (email) {
+
+    return this.find({
+      'personalInfo.email': email,
+      accountStatus: {
+        $ne: app.config.user.accountStatus.restaurantOwner.deleted,
+      },
+    })
+      .exec()
+      .then((restaurantOwnerDocs) =>
+        restaurantOwnerDocs?.length
+          ? Promise.resolve(restaurantOwnerDocs)
+          : Promise.reject({
+            errCode: 'RESTAURANT_OWNER_NOT_FOUND',
+          })
+      )
+      .then((restaurantOwnerDocs) => {
+        const token = app.utility.getRandomCode(20);
+        const timeout = new Date(new Date().getTime() + 10 * 60 * 1000);
+
+        const updatePromises = restaurantOwnerDocs.map((doc) => {
+          doc.authenticationInfo.link = {
+            token: token,
+            timeout: timeout,
+          };
+          return doc.save();
+        });
+
+        return Promise.all(updatePromises).then((savedDocs) => {
+          // Send email only once using the first document
+          const restaurantOwnerDoc = savedDocs[0];
+
+          ////////////////////////////////////////
+          //TODO: Send OTP for forgot password  //
+          ///////////////////////////////////////
+          let emailNotification = app.config.notification.email(app, app.config.lang.defaultLanguage),
+            multilangConfig = app.config.lang[app.config.lang.defaultLanguage];
+          // create email template
+          app.render(
+            emailNotification.forgotPassword.pageName,
+            {
+              greeting: multilangConfig.email.forgotPassword.greeting,
+              firstName: restaurantOwnerDoc.personalInfo.fullName,
+              message: multilangConfig.email.forgotPassword.message,
+              resetPasswordLink: `https://immedine.com/auth/verify-token?token=${restaurantOwnerDoc.authenticationInfo.link.token}&type=reset`,
+              note: multilangConfig.email.forgotPassword.note
+            },
+            function (err, renderedText) {
+              if (err) {
+                console.log(err);
+              } else {
+                // send email
+                app.service.notification.email.immediate({
+                  userId: restaurantOwnerDoc._id,
+                  userType: app.config.user.role.restaurantOwner,
+                  emailId: restaurantOwnerDoc.personalInfo.email,
+                  subject: emailNotification.forgotPassword.subject,
+                  body: renderedText,
+                });
+              }
+            }
+          );
+
+          return Promise.resolve({});
+        });
+      });
+  };
+
   restaurantOwnerSchema.statics.verifyToken = function (token, type) {
     if (type === 'reset' || type === 'registration') {
 
@@ -930,6 +998,72 @@ module.exports = function (app, mongoose /*, plugins*/) {
           return restaurantOwnerDoc.save();
         })
       );
+  };
+
+  restaurantOwnerSchema.statics.forgotPasswordVerifyOTPMulti = function (token, password) {
+    return this.find({
+      'authenticationInfo.link.token': token,
+      accountStatus: {
+        $ne: app.config.user.accountStatus.restaurantOwner.deleted,
+      },
+    })
+      .exec()
+      .then((restaurantOwnerDocs) =>
+        restaurantOwnerDocs?.length
+          ? Promise.resolve(restaurantOwnerDocs)
+          : Promise.reject({
+            errCode: 'TOKEN_INVALID',
+          })
+      )
+      .then((restaurantOwnerDocs) => {
+        const savedToken = {
+          token: restaurantOwnerDocs[0].authenticationInfo.link.token,
+          timeout: restaurantOwnerDocs[0].authenticationInfo.link.timeout,
+        };
+
+        if (savedToken.timeout && new Date() < savedToken.timeout) {
+          if (savedToken.token === token) {
+            // Unset the otp object from all documents
+            const unsetPromises = restaurantOwnerDocs.map((doc) =>
+              doc.updateOne({
+                $unset: {
+                  'authenticationInfo.link.token': 1,
+                },
+              }).exec()
+            );
+
+            return Promise.all(unsetPromises).then(() => {
+              // Update password for all documents
+              return app.utility.encryptPassword(password).then((hash) => {
+                const updatePromises = restaurantOwnerDocs.map((doc) => {
+                  doc.authenticationInfo.password = hash;
+                  return doc.save();
+                });
+                return Promise.all(updatePromises);
+              });
+            });
+          } else {
+            return Promise.reject({
+              errCode: 'TOKEN_INVALID',
+            });
+          }
+        } else {
+          // Unset the otp object from all documents
+          const unsetPromises = restaurantOwnerDocs.map((doc) =>
+            doc.updateOne({
+              $unset: {
+                'authenticationInfo.link.token': 1,
+              },
+            }).exec()
+          );
+
+          return Promise.all(unsetPromises).then(() =>
+            Promise.reject({
+              errCode: 'TOKEN_TIMEDOUT',
+            })
+          );
+        }
+      });
   };
 
   /**

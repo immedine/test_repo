@@ -1,0 +1,79 @@
+'use strict';
+
+///////////////////////////////////////////////////
+// THIS IS THE ROUTE FILE FOR SALES HISTORY MODULE //
+///////////////////////////////////////////////////
+
+/**
+ * The express router
+ * @type {Express.Router}
+ */
+const router = require('express').Router();
+
+/**
+ * @param  {Express} app     The express app reference
+ * @param  {Object}  options The options for this module
+ * @return {Object}          The revealed module
+ */
+module.exports = function (app, options) {
+
+  /**
+   * The JSON-Schema for these APIs
+   * @type {Object}
+   */
+  const schemaValidator = require('./schema-validator')(app);
+
+  /**
+   * The Controllers for these APIs
+   * @type {Object}
+   */
+  const controllers = require('./controller')(app);
+
+  /**
+   * The Common Middlewares for these APIs
+   * @type {Object}
+   */
+  const commonMiddlewares = require('../../common/middleware')(app);
+
+  /**
+   * Adds a sales history
+   */
+  router.post('/add', [
+    options.validateBody(schemaValidator.add),
+    controllers.add
+  ]);
+
+  /**
+   * Fetches a list of sales histories
+   */
+  router.post('/list', [
+    options.validateQuery(schemaValidator.listQuery),
+    options.validateBody(schemaValidator.list),
+    controllers.list
+  ]);
+
+  router.post('/my-list', [
+    options.validateQuery(schemaValidator.listQuery),
+    options.validateBody(schemaValidator.list),
+    controllers.myList
+  ]);
+
+  /**
+   * Fetches a sales history and edits a sales history
+   */
+  router.route('/:salesHistoryId')
+    .all([
+      options.validateParams(schemaValidator.param),
+      commonMiddlewares.validateId('SalesHistory', 'salesHistoryId')
+    ])
+    .get([
+      controllers.get
+    ]);
+    // .put([
+    //   options.validateBody(schemaValidator.edit),
+    //   controllers.edit
+    // ]);
+
+
+  return router;
+};

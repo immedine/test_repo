@@ -37,6 +37,10 @@ module.exports = {
     active: 1,
     deleted: 2
   },
+  salesHistory: {
+    active: 1,
+    deleted: 2
+  },
   order: {
     active: 1,
     cooking: 2,

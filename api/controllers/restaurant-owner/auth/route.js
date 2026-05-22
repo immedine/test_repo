@@ -50,6 +50,11 @@ module.exports = function (app, options) {
     controllers.forgotPassword.requestOTP,
   ]);
 
+  router.post('/forgot-password/request-otp-multi', [
+    options.validateBody(schemaValidator.forgotPassword.requestOTP),
+    controllers.forgotPassword.requestOTPMulti,
+  ]);
+
   router.post('/verify-token', [
     controllers.verifyToken,
   ]);
@@ -70,6 +75,11 @@ module.exports = function (app, options) {
   router.post('/forgot-password/verify-otp', [
     options.validateBody(schemaValidator.forgotPassword.verifyOTP),
     controllers.forgotPassword.verifyOTP,
+  ]);
+
+  router.post('/forgot-password/verify-otp-multi', [
+    options.validateBody(schemaValidator.forgotPassword.verifyOTP),
+    controllers.forgotPassword.verifyOTPMulti,
   ]);
 
   router.post('/signup', [options.validateBody(schemaValidator.signup), controllers.signupRequest]);

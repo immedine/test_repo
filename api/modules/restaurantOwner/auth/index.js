@@ -83,6 +83,10 @@ module.exports = function (app) {
     return RestaurantOwner.forgotPasswordCreateOTP(email);
   };
 
+  const forgotPasswordCreateOTPMulti = function (email) {
+    return RestaurantOwner.forgotPasswordCreateOTPMulti(email);
+  };
+
   /**
    * Verifies the OTP and sets the new password
    * @param  {String}  email    The email
@@ -92,6 +96,10 @@ module.exports = function (app) {
    */
   const forgotPasswordVerifyOTP = function (token, password) {
     return RestaurantOwner.forgotPasswordVerifyOTP(token, password);
+  };
+
+  const forgotPasswordVerifyOTPMulti = function (token, password) {
+    return RestaurantOwner.forgotPasswordVerifyOTPMulti(token, password);
   };
 
   const verifyToken = function (token, type) {
@@ -143,6 +151,8 @@ module.exports = function (app) {
     forgotPassword: {
       create: forgotPasswordCreateOTP,
       verify: forgotPasswordVerifyOTP,
+      createMulti: forgotPasswordCreateOTPMulti,
+      verifyMulti: forgotPasswordVerifyOTPMulti
     },
     sendVerificationLink
   };

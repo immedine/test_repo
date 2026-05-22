@@ -163,6 +163,18 @@ module.exports = function (app, mongoose) {
         type: Boolean,
         default: false
       },
+      isAddress: {
+        type: Boolean,
+        default: false
+      },
+      isPhoneNumber: {
+        type: Boolean,
+        default: false
+      },
+      isSacCode: {
+        type: Boolean,
+        default: false
+      },
       isGST: {
         type: Boolean,
         default: false
@@ -298,6 +310,14 @@ module.exports = function (app, mongoose) {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Subscription',
       default: null
+    },
+    phone: {
+      countryCode: { type: String, default: 'IN' },
+      number: { type: String },
+    },
+    sacCode: {
+      type: String,
+      default: ''
     }
   }, {
     versionKey: false,
