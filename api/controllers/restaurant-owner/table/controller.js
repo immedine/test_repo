@@ -67,7 +67,11 @@ module.exports = function (app) {
         select: 'status orderRef',
         populate: [{
           path: 'orderRef',
-          select: 'createdAt orderId status idbId'
+          select: 'createdAt orderId status idbId createdBy',
+          populate: [{
+            path: 'createdBy',
+            select: 'personalInfo _id'
+          }]
         }]
       }]
     };
