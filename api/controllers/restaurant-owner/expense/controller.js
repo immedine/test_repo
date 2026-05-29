@@ -13,7 +13,7 @@ module.exports = function(app) {
   const vendor = app.module.vendor;
   const menu = app.module.menu;
   const inventory = app.module.inventory;
-
+  const batch = app.module.batch;
   /**
    * Adds a expense
    * @param  {Object}   req  Request 
@@ -34,7 +34,10 @@ module.exports = function(app) {
       items: req.body.items
     }, req.session.user)
       .then(async output => {
-        await inventory.updateInventoryWithPurchase(req.body.items, output._id, false, req.session.user);
+        await Promise.all([
+          inventory.updateInventoryWithPurchase(req.body.items, output._id, false, req.session.user),
+          batch.updateBatchWithPurchase(req.body.items, output._id, false, req.session.user)
+        ]);
         req.workflow.outcome.data = output;
         req.workflow.emit('response');
       })
@@ -139,7 +142,10 @@ module.exports = function(app) {
     req.expenseId.status = app.config.contentManagement.expense.deleted;
     expense.edit(req.expenseId, req.session.user)
       .then(async output => {
-        await inventory.updateInventoryWithPurchase(req.expenseId.items, req.expenseId._id, true, req.session.user);
+         await Promise.all([
+          inventory.updateInventoryWithPurchase(req.expenseId.items, req.expenseId._id, true, req.session.user),
+          batch.updateBatchWithPurchase(req.expenseId.items, req.expenseId._id, true, req.session.user)
+        ]);
         req.workflow.emit('response');
       })
       .catch(next);

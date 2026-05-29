@@ -71,6 +71,7 @@ module.exports = function(app) {
     Requisition: db.model('Requisition', require('./models/requisition')(app, mongoose, plugins)),
     RequisitionOrder: db.model('RequisitionOrder', require('./models/requisitionOrder')(app, mongoose, plugins)),
     SalesHistory: db.model('SalesHistory', require('./models/salesHistory')(app, mongoose, plugins)),
+    Batch: db.model('Batch', require('./models/batch')(app, mongoose, plugins)),
   };
 
   return db;

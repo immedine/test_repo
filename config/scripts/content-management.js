@@ -41,6 +41,10 @@ module.exports = {
     active: 1,
     deleted: 2
   },
+  batch: {
+    active: 1,
+    inactive: 2
+  },
   order: {
     active: 1,
     cooking: 2,

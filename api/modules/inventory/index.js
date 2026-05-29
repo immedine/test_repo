@@ -862,9 +862,7 @@ module.exports = function (app) {
       payload.forEach(item => {
         const oldInventory = inventoryMap[item.itemRef.toString()];
 
-        console.log("oldInventory ", oldInventory)
-
-
+        // console.log("oldInventory ", oldInventory)
 
         // 1️⃣ Update main inventory
         bulkOps.push({

@@ -47,11 +47,11 @@ module.exports = function (app) {
    */
   const editRequisition = function (editedRequisition, userRef) {
 
-    if (editedRequisition.requestedByRestaurantRef.toString() !== userRef.restaurantRef.toString()) {
-      return Promise.reject({
-        'errCode': 'REQUISITION_NOT_FOUND'
-      });
-    }
+    // if (editedRequisition.requestedByRestaurantRef.toString() !== userRef.restaurantRef.toString()) {
+    //   return Promise.reject({
+    //     'errCode': 'REQUISITION_NOT_FOUND'
+    //   });
+    // }
 
     return editedRequisition.save();
   };

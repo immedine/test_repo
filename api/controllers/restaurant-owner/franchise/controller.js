@@ -17,6 +17,7 @@ module.exports = function (app) {
     req.body.type = app.config.contentManagement.outletType.franchise;
     req.body.masterRestaurant = req.session.user.restaurantRef;
     req.body.deviceType = [app.config.user.deviceType.android];
+    req.body.currentRequisitionMonthlyAmountLeft = req.body.maxRequisitionMonthlyAmount || 0;
     restaurant.create(req.body)
       .then(output => {
         req.workflow.emit('response');

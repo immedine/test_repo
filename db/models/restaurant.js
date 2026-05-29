@@ -306,6 +306,10 @@ module.exports = function (app, mongoose) {
       type: Number,
       default: 0
     },
+    currentRequisitionMonthlyAmountLeft: {
+      type: Number,
+      default: 0
+    },
     subscriptionRef: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Subscription',

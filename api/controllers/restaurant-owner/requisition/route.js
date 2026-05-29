@@ -51,6 +51,12 @@ module.exports = function (app, options) {
     options.validateBody(schemaValidator.list),
     controllers.list
   ]);
+  
+  router.post('/all-list', [
+    options.validateQuery(schemaValidator.listQuery),
+    options.validateBody(schemaValidator.list),
+    controllers.getAllRequisitionList
+  ]);
 
   router.put('/cancel/:requisitionId', [
     options.validateParams(schemaValidator.param),

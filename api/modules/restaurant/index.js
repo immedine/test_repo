@@ -200,6 +200,20 @@ module.exports = function (app) {
       });
   };
 
+  const updateRestaurantRequisitionAmount = (restaurantId, amount, inc) => {
+    return Restaurant.findById(restaurantId)
+      .then(restaurant => {
+        if (!restaurant) {
+          return Promise.reject({
+            'errCode': 'RESTAURANT_NOT_FOUND'
+          });
+        }
+        restaurant.currentRequisitionMonthlyAmountLeft = inc ? restaurant.currentRequisitionMonthlyAmountLeft + amount : restaurant.currentRequisitionMonthlyAmountLeft - amount;
+        return restaurant.save();
+      }
+    );
+  }
+
 
   return {
     'create': createRestaurant,
@@ -215,6 +229,7 @@ module.exports = function (app) {
     'updateParcel': updateParcel,
     'updateWater': updateWater,
     'updateBillDetails': updateBillDetails,
-    'updateBranding': updateBranding
+    'updateBranding': updateBranding,
+    'updateRestaurantRequisitionAmount': updateRestaurantRequisitionAmount
   };
 };

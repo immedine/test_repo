@@ -30,6 +30,12 @@ module.exports = function (app) {
 
     const restaurantDetails = await restaurant.get(req.session.user.restaurantRef);
 
+    if (restaurantDetails.currentRequisitionMonthlyAmountLeft < req.body.total) {
+      return next({
+        'errCode': 'REQUISITION_AMOUNT_EXCEEDS_LIMIT'
+      });
+    }
+
     const requisitionCountQuery = {
       requestedByRestaurantRef: req.session.user.restaurantRef,
       createdAt: {
@@ -52,6 +58,7 @@ module.exports = function (app) {
 
     requisition.create(req.body, req.session.user)
       .then(output => {
+        restaurant.updateRestaurantRequisitionAmount(req.session.user.restaurantRef, req.body.total);
         req.workflow.outcome.data = output;
         req.workflow.emit('response');
       })
@@ -88,6 +95,42 @@ module.exports = function (app) {
       filters: {
         // status: app.config.contentManagement.requisitionStatus.active,
         requestedByRestaurantRef: req.session.user.restaurantRef
+      },
+      sort: {
+        createdAt: -1
+      },
+      keys: '_id reqId status createdAt total'
+    };
+
+    if (req.body.filters) {
+      let { reqId } = req.body.filters;
+      if (reqId) {
+        query.filters.reqId = new RegExp(`^${reqId}`, 'ig');
+      }
+    }
+    // if (req.body.sortConfig) {
+    //   let { name,order } = req.body.sortConfig;
+    //   if (name) {
+    //     query.sort = {name};
+    //   }
+    // }
+
+    requisition.list(query)
+      .then(output => {
+        req.workflow.outcome.data = output;
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
+
+  const getAllRequisitionList = (req, res, next) => {
+    let query = {
+      skip: Number(req.query.skip) || app.config.page.defaultSkip,
+      limit: Number(req.query.limit) || app.config.page.defaultLimit,
+      filters: {
+        // status: app.config.contentManagement.requisitionStatus.active,
+        requestedToRestaurantRef: req.session.user.restaurantRef
       },
       sort: {
         createdAt: -1
@@ -211,6 +254,8 @@ module.exports = function (app) {
     if (Object.keys(req.body).length) {
       req.requisitionId.status = req.body.status;
       req.requisitionId.cart = req.body.cart || req.requisitionId.cart;
+      req.requisitionId.total = req.body.total || req.requisitionId.total;
+      req.requisitionId.subTotal = req.body.subTotal || req.requisitionId.subTotal;
 
       req.requisitionId.history.push({
         status: req.body.status,
@@ -230,6 +275,7 @@ module.exports = function (app) {
             })
             .catch(next);
         } else {
+          restaurant.updateRestaurantRequisitionAmount(req.requisitionId.requestedByRestaurantRef, req.requisitionId.total, true);
           req.workflow.outcome.data = output;
           req.workflow.emit('response');
         }
@@ -317,7 +363,8 @@ module.exports = function (app) {
     cancelRequisition: cancelRequisition,
     approveRejectRequisition: approveRejectRequisition,
     createRequisitionOrder: createRequisitionOrder,
-    requisitionOrderDelivered: requisitionOrderDelivered
+    requisitionOrderDelivered: requisitionOrderDelivered,
+    getAllRequisitionList: getAllRequisitionList
   };
 
 };

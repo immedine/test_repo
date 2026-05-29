@@ -28,6 +28,7 @@ module.exports = function(app) {
   const feedback = require('./feedback')(app);
   const vendor = require('./vendor')(app);
   const query = require('./query')(app);
+  const batch = require('./batch')(app);
   const expense = require('./expense')(app);
   const tableSession = require('./tableSession')(app);
   const imageByAI = require('./imageByAI')(app);
@@ -64,6 +65,7 @@ module.exports = function(app) {
     subscription,
     requisition,
     requisitionOrder,
-    salesHistory
+    salesHistory,
+    batch
   };
 };
