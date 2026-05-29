@@ -254,6 +254,7 @@ module.exports = function (app) {
     if (Object.keys(req.body).length) {
       req.requisitionId.status = req.body.status;
       req.requisitionId.cart = req.body.cart || req.requisitionId.cart;
+      const prevTotal = req.requisitionId.total || 0;
       req.requisitionId.total = req.body.total || req.requisitionId.total;
       req.requisitionId.subTotal = req.body.subTotal || req.requisitionId.subTotal;
 
@@ -268,6 +269,9 @@ module.exports = function (app) {
     requisition.edit(req.requisitionId, req.session.user)
       .then(output => {
         if (req.body.status === app.config.contentManagement.requisitionStatus.approved) {
+          if (prevTotal !== req.body.total) {
+            restaurant.updateRestaurantRequisitionAmount(req.requisitionId.requestedByRestaurantRef, prevTotal - req.body.total, true);
+          }
           inventory.updateInventoryCountForRequisition(req.requisitionId.cart, req.requisitionId._id, req.session.user)
             .then(() => {
               req.workflow.outcome.data = output;
