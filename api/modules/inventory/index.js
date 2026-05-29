@@ -900,7 +900,7 @@ module.exports = function (app) {
               },
               update: {
                 $set: {
-                  "locationList.$.avgRate": newAvgRate
+                  "locationList.$.avgRate": Number.isFinite(newAvgRate) ? Number(newAvgRate) : 0
                 },
                 $inc: {
                   "locationList.$.quantity": !isDeduct ? loc.quantity : -loc.quantity
@@ -934,7 +934,7 @@ module.exports = function (app) {
               update: {
                 $addToSet: {
                   locationList: {
-                    avgRate: newAvgRate,
+                    avgRate: Number.isFinite(newAvgRate) ? Number(newAvgRate) : 0,
                     location: loc.location,
                     quantity: !isDeduct ? loc.quantity : -loc.quantity,
                     history: [{
