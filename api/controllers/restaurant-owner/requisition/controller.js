@@ -484,6 +484,94 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const getRequisitionOrderList = (req, res, next) => {
+    let query = {
+      skip: Number(req.query.skip) || app.config.page.defaultSkip,
+      limit: Number(req.query.limit) || app.config.page.defaultLimit,
+      filters: {
+        // status: app.config.contentManagement.requisitionStatus.active,
+        requestedByRestaurantRef: req.session.user.restaurantRef
+      },
+      sort: {
+        createdAt: -1
+      },
+      keys: '_id requisitionId requestedBy status createdAt',
+      populate: [{
+        path: 'requisitionId',
+        select: '_id total reqId status createdAt'
+      }]
+    };
+
+    // if (req.body.filters) {
+    //   let { reqId } = req.body.filters;
+    //   if (reqId) {
+    //     query.filters.reqId = new RegExp(`^${reqId}`, 'ig');
+    //   }
+    // }
+    // if (req.body.sortConfig) {
+    //   let { name,order } = req.body.sortConfig;
+    //   if (name) {
+    //     query.sort = {name};
+    //   }
+    // }
+
+    requisitionOrder.list(query)
+      .then(output => {
+        req.workflow.outcome.data = output;
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
+
+  const getAllRequisitionOrderList = (req, res, next) => {
+    let query = {
+      skip: Number(req.query.skip) || app.config.page.defaultSkip,
+      limit: Number(req.query.limit) || app.config.page.defaultLimit,
+      filters: {
+        // status: app.config.contentManagement.requisitionStatus.active,
+        requestedToRestaurantRef: req.session.user.restaurantRef
+      },
+      sort: {
+        createdAt: -1
+      },
+      keys: '_id requisitionId requestedByRestaurantRef requestedBy status createdAt',
+      populate: [{
+        path: 'requisitionId',
+        select: '_id total reqId status createdAt'
+      }]
+    };
+
+    // if (req.body.filters) {
+    //   let { reqId } = req.body.filters;
+    //   if (reqId) {
+    //     query.filters.reqId = new RegExp(`^${reqId}`, 'ig');
+    //   }
+    // }
+    // if (req.body.sortConfig) {
+    //   let { name,order } = req.body.sortConfig;
+    //   if (name) {
+    //     query.sort = {name};
+    //   }
+    // }
+
+    requisitionOrder.list(query)
+      .then(output => {
+        req.workflow.outcome.data = output;
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
+  const getRequisitionOrder = (req, res, next) => {
+    requisitionOrder.get(req.params.orderId, req.session.user)
+      .then(output => {
+        req.workflow.outcome.data = output;
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
   return {
     add: addRequisition,
     get: getRequisition,
@@ -497,7 +585,10 @@ module.exports = function (app) {
     dispatchRequisitionOrderByAdmin: dispatchRequisitionOrderByAdmin,
     assignDriverToRequisitionOrderByAdmin: assignDriverToRequisitionOrderByAdmin,
     readyToTransitRequisitionOrderByAdmin: readyToTransitRequisitionOrderByAdmin,
-    getAllRequisitionList: getAllRequisitionList
+    getAllRequisitionList: getAllRequisitionList,
+    getRequisitionOrderList: getRequisitionOrderList,
+    getAllRequisitionOrderList: getAllRequisitionOrderList,
+    getRequisitionOrder: getRequisitionOrder
   };
 
 };

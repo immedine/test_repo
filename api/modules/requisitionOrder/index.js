@@ -29,9 +29,11 @@ module.exports = function (app) {
    */
   const findRequisitionOrderById = function (requisitionOrderId, userRef) {
     return RequisitionOrder.findById(requisitionOrderId)
+    .populate('requestedBy', '_id personalInfo')
+    .populate('requestedByRestaurantRef', '_id name')
+    .populate('requisitionId', '_id reqId total status createdAt')
     .then(requisitionOrderDetails => {
-      if(!requisitionOrderDetails || (requisitionOrderDetails && 
-        requisitionOrderDetails.requestedByRestaurantRef.toString() !== userRef.restaurantRef.toString())) {
+      if(!requisitionOrderDetails) {
         return Promise.reject({
           'errCode': 'REQUISITION_NOT_FOUND'
         });

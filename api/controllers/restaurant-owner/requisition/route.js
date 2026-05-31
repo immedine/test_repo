@@ -102,6 +102,24 @@ module.exports = function (app, options) {
     controllers.readyToTransitRequisitionOrderByAdmin
   ]);
 
+  router.post('/order-list', [
+    options.validateQuery(schemaValidator.listQuery),
+    options.validateBody(schemaValidator.list),
+    controllers.getRequisitionOrderList
+  ]);
+  
+  router.post('/all-order-list', [
+    options.validateQuery(schemaValidator.listQuery),
+    options.validateBody(schemaValidator.list),
+    controllers.getAllRequisitionOrderList
+  ]);
+
+  router.get('/order/:orderId', [
+    options.validateParams(schemaValidator.orderIdParam),
+    commonMiddlewares.validateId('RequisitionOrder', 'orderId'),
+    controllers.getRequisitionOrder
+  ]);
+
   /**
    * Fetches a requisition, edits a requisition and removes a requisition
    */
