@@ -308,8 +308,13 @@ module.exports = function (app) {
       }],
     })
       .then(output => {
-        req.workflow.outcome.data = output;
-        req.workflow.emit('response');
+        req.requisitionId.status = app.config.contentManagement.requisitionStatus.ordered;
+        requisition.edit(req.requisitionId, req.session.user)
+          .then(() => {
+            req.workflow.outcome.data = output;
+            req.workflow.emit('response');
+          })
+          .catch(next);
       })
       .catch(next);
   };
@@ -336,11 +341,131 @@ module.exports = function (app) {
         restaurantDetails,
         req.session.user
       );
+      
+      requisitionDetails.status = app.config.contentManagement.requisitionStatus.completed;
+
+      await requisition.edit(requisitionDetails, req.session.user);;
 
       req.workflow.emit('response');
     } catch (error) {
       next(error); // ✅ this is critical
     }
+  };
+
+  const dispatchRequisitionOrderByAdmin = async (req, res, next) => {
+
+    const requisitionDetails = await requisition.get(req.orderId.requisitionId);
+
+    if (requisitionDetails.requestedToRestaurantRef.toString() !== req.session.user.restaurantRef.toString()) {
+      return next({
+        'errCode': 'UNAUTHORIZED_REQUISITION_ACTION'
+      });
+    } else if (requisitionDetails.status === app.config.contentManagement.requisitionStatus.cancelled) {
+      return next({
+        'errCode': 'REQUISITION_ALREADY_CANCELLED'
+      });
+    } else if (requisitionDetails.status === app.config.contentManagement.requisitionStatus.rejected) {
+      return next({
+        'errCode': 'REQUISITION_ALREADY_REJECTED'
+      });
+    } else if (requisitionDetails.status !== app.config.contentManagement.requisitionStatus.ordered) {
+      return next({
+        'errCode': 'REQUISITION_NOT_ORDERED'
+      });
+    }
+
+    req.orderId.status = app.config.contentManagement.requisitionOrderStatus.dispatched;
+
+    req.orderId.history.push({
+      status: app.config.contentManagement.requisitionOrderStatus.dispatched,
+      updatedBy: req.session.user._id,
+      remarks: 'REQUISITION_ORDER_DISPATCHED',
+      comments: req.body.comments || ""
+    });
+
+    requisitionOrder.edit(req.orderId, req.session.user)
+      .then(output => {
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
+  const assignDriverToRequisitionOrderByAdmin = async (req, res, next) => {
+
+    const requisitionDetails = await requisition.get(req.orderId.requisitionId);
+
+    if (requisitionDetails.requestedToRestaurantRef.toString() !== req.session.user.restaurantRef.toString()) {
+      return next({
+        'errCode': 'UNAUTHORIZED_REQUISITION_ACTION'
+      });
+    } else if (requisitionDetails.status === app.config.contentManagement.requisitionStatus.cancelled) {
+      return next({
+        'errCode': 'REQUISITION_ALREADY_CANCELLED'
+      });
+    } else if (requisitionDetails.status === app.config.contentManagement.requisitionStatus.rejected) {
+      return next({
+        'errCode': 'REQUISITION_ALREADY_REJECTED'
+      });
+    } else if (requisitionDetails.status !== app.config.contentManagement.requisitionStatus.ordered) {
+      return next({
+        'errCode': 'REQUISITION_NOT_ORDERED'
+      });
+    }
+
+    req.orderId.status = app.config.contentManagement.requisitionOrderStatus.driverAssigned;
+    req.orderId.driverDetails = req.body.driverDetails;
+    req.orderId.vehicleDetails = req.body.vehicleDetails || req.orderId.vehicleDetails;
+
+    req.orderId.history.push({
+      status: app.config.contentManagement.requisitionOrderStatus.driverAssigned,
+      updatedBy: req.session.user._id,
+      remarks: 'DRIVER_ASSIGNED'
+    });
+
+    requisitionOrder.edit(req.orderId, req.session.user)
+      .then(output => {
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
+  const readyToTransitRequisitionOrderByAdmin = async (req, res, next) => {
+
+    const requisitionDetails = await requisition.get(req.orderId.requisitionId);
+
+    if (requisitionDetails.requestedToRestaurantRef.toString() !== req.session.user.restaurantRef.toString()) {
+      return next({
+        'errCode': 'UNAUTHORIZED_REQUISITION_ACTION'
+      });
+    } else if (requisitionDetails.status === app.config.contentManagement.requisitionStatus.cancelled) {
+      return next({
+        'errCode': 'REQUISITION_ALREADY_CANCELLED'
+      });
+    } else if (requisitionDetails.status === app.config.contentManagement.requisitionStatus.rejected) {
+      return next({
+        'errCode': 'REQUISITION_ALREADY_REJECTED'
+      });
+    } else if (requisitionDetails.status !== app.config.contentManagement.requisitionStatus.ordered) {
+      return next({
+        'errCode': 'REQUISITION_NOT_ORDERED'
+      });
+    }
+
+    req.orderId.status = app.config.contentManagement.requisitionOrderStatus.inTransit;
+    req.orderId.driverDetails = req.body.driverDetails || req.orderId.driverDetails;
+    req.orderId.vehicleDetails = req.body.vehicleDetails || req.orderId.vehicleDetails;
+
+    req.orderId.history.push({
+      status: app.config.contentManagement.requisitionOrderStatus.inTransit,
+      updatedBy: req.session.user._id,
+      remarks: 'READY_TO_TRANSIT'
+    });
+
+    requisitionOrder.edit(req.orderId, req.session.user)
+      .then(output => {
+        req.workflow.emit('response');
+      })
+      .catch(next);
   };
 
   /**
@@ -369,6 +494,9 @@ module.exports = function (app) {
     approveRejectRequisition: approveRejectRequisition,
     createRequisitionOrder: createRequisitionOrder,
     requisitionOrderDelivered: requisitionOrderDelivered,
+    dispatchRequisitionOrderByAdmin: dispatchRequisitionOrderByAdmin,
+    assignDriverToRequisitionOrderByAdmin: assignDriverToRequisitionOrderByAdmin,
+    readyToTransitRequisitionOrderByAdmin: readyToTransitRequisitionOrderByAdmin,
     getAllRequisitionList: getAllRequisitionList
   };
 

@@ -82,6 +82,26 @@ module.exports = function (app, options) {
     controllers.requisitionOrderDelivered
   ]);
 
+  router.put('/dispatch-order/:orderId', [
+    options.validateParams(schemaValidator.orderIdParam),
+    commonMiddlewares.validateId('RequisitionOrder', 'orderId'),
+    controllers.dispatchRequisitionOrderByAdmin
+  ]);
+
+  router.put('/assign-driver-to-order/:orderId', [
+    options.validateParams(schemaValidator.orderIdParam),
+    commonMiddlewares.validateId('RequisitionOrder', 'orderId'),
+    options.validateBody(schemaValidator.assignDriverToRequisitionOrderByAdmin),
+    controllers.assignDriverToRequisitionOrderByAdmin
+  ]);
+
+  router.put('/order-ready-to-transit/:orderId', [
+    options.validateParams(schemaValidator.orderIdParam),
+    commonMiddlewares.validateId('RequisitionOrder', 'orderId'),
+    options.validateBody(schemaValidator.readyToTransitRequisitionOrderByAdmin),
+    controllers.readyToTransitRequisitionOrderByAdmin
+  ]);
+
   /**
    * Fetches a requisition, edits a requisition and removes a requisition
    */

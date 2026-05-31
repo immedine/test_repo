@@ -21,6 +21,16 @@ module.exports = function (app, mongoose) {
       ref: 'RestaurantOwner',
       required: true
     },
+    driverDetails: {
+      fullName: String,
+      phone: {
+        countryCode: { type: String, default: 'IN' },
+        number: { type: String },
+      },
+    },
+    vehicleDetails: {
+      licensePlate: String
+    },
     status: {
       type: Number,
       default: app.config.contentManagement.requisitionOrderStatus.active

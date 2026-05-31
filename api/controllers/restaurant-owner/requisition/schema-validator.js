@@ -160,6 +160,70 @@ module.exports = function (app) {
     }
   };
 
+  const assignDriverToRequisitionOrderByAdmin = {
+    'driverDetails': {
+      type: 'object',
+      required: true,
+      properties: {
+        'fullName': {
+          type: 'string',
+          required: true,
+          allowEmpty: false,
+        },
+        'phone': {
+          type: 'object',
+          properties: {
+            'countryCode': {
+              type: 'string'
+            },
+            'number': {
+              type: 'string',
+              required: true,
+              allowEmpty: false,
+            },
+          }
+        },
+      }
+    }
+  };
+
+  const readyToTransitRequisitionOrderByAdmin = {
+    'driverDetails': {
+      type: 'object',
+      properties: {
+        'fullName': {
+          type: 'string',
+          required: true,
+          allowEmpty: false,
+        },
+        'phone': {
+          type: 'object',
+          properties: {
+            'countryCode': {
+              type: 'string'
+            },
+            'number': {
+              type: 'string',
+              required: true,
+              allowEmpty: false,
+            },
+          }
+        },
+      }
+    },
+    'vehicleDetails': {
+      type: 'object',
+      required: true,
+      properties: {
+        'licensePlate': {
+          type: 'string',
+          required: true,
+          allowEmpty: false,
+        }
+      }
+    }
+  };
+
   return {
     add: addRequisition,
     edit: addRequisition,
@@ -167,6 +231,8 @@ module.exports = function (app) {
     param: param,
     orderIdParam: orderIdParam,
     list: list,
+    assignDriverToRequisitionOrderByAdmin: assignDriverToRequisitionOrderByAdmin,
+    readyToTransitRequisitionOrderByAdmin: readyToTransitRequisitionOrderByAdmin
   };
 
 };

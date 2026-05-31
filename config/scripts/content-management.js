@@ -166,12 +166,14 @@ module.exports = {
     approved: 2,
     rejected: 3,
     cancelled: 4,
-    completed: 5
+    ordered: 5
   },
   requisitionOrderStatus: {
     active: 1,
-    inTransit: 2,
-    delivered: 3,
-    cancelled: 4
+    dispatched: 2,
+    driverAssigned: 3,
+    inTransit: 4,
+    delivered: 5,
+    cancelled: 6
   }
 };
