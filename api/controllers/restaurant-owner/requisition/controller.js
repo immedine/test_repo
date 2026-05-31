@@ -251,10 +251,11 @@ module.exports = function (app) {
       });
     }
 
+    const prevTotal = req.requisitionId.total || 0;
+
     if (Object.keys(req.body).length) {
       req.requisitionId.status = req.body.status;
       req.requisitionId.cart = req.body.cart || req.requisitionId.cart;
-      const prevTotal = req.requisitionId.total || 0;
       req.requisitionId.total = req.body.total || req.requisitionId.total;
       req.requisitionId.subTotal = req.body.subTotal || req.requisitionId.subTotal;
 
