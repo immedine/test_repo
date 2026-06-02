@@ -75,6 +75,15 @@ module.exports = function (app) {
   const getRequisition = (req, res, next) => {
     requisition.get(req.params.requisitionId, req.session.user)
       .then(output => {
+        if (output.status === app.config.contentManagement.requisitionStatus.ordered) {
+          return requisitionOrder.getByRequisitionId(output._id, req.session.user)
+            .then(orderDetails => {
+              output = output.toObject();
+              output.orderDetails = orderDetails;
+              req.workflow.outcome.data = output;
+              req.workflow.emit('response');
+            });
+        }
         req.workflow.outcome.data = output;
         req.workflow.emit('response');
       })
@@ -341,7 +350,7 @@ module.exports = function (app) {
         restaurantDetails,
         req.session.user
       );
-      
+
       requisitionDetails.status = app.config.contentManagement.requisitionStatus.completed;
 
       await requisition.edit(requisitionDetails, req.session.user);;

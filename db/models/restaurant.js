@@ -310,6 +310,10 @@ module.exports = function (app, mongoose) {
       type: Number,
       default: 0
     },
+    franchiseInventoryLocation: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null
+    },
     subscriptionRef: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Subscription',

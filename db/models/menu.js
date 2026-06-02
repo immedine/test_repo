@@ -12,6 +12,14 @@ module.exports = function (app, mongoose) {
         type: String
       }]
     }],
+    excludeGST: {
+      type: Boolean,
+      default: false
+    },
+    excludeServiceCharge: {
+      type: Boolean,
+      default: false
+    },
     name: {
       type: String,
       required: true

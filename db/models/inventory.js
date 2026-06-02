@@ -53,6 +53,10 @@ module.exports = function (app, mongoose) {
       location: {
         type: mongoose.Schema.Types.ObjectId,
       },
+      sellingPrice: {
+        type: Number,
+        default: 0
+      },
       avgRate: {
         type: Number,
         default: 0

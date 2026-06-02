@@ -86,12 +86,29 @@ module.exports = function (app) {
     return RequisitionOrder.countDocuments(options);
   };
 
+  const findByRequisitionId = function (requisitionId, userRef) {
+    return RequisitionOrder.findOne({ requisitionId: requisitionId })
+    .populate('requestedBy', '_id personalInfo')
+    .populate('requestedByRestaurantRef', '_id name')
+    .populate('requisitionId', '_id reqId total status createdAt')
+    .then(requisitionOrderDetails => {
+      if(!requisitionOrderDetails) {
+        return Promise.reject({
+          'errCode': 'REQUISITION_NOT_FOUND'
+        });
+      } else {
+        return Promise.resolve(requisitionOrderDetails);
+      }
+    });
+  };
+
   return {
     'create': createRequisitionOrder,
     'get': findRequisitionOrderById,
     'edit': editRequisitionOrder,
     'list': getList,
     'remove': removeRequisitionOrder,
-    'getCount': getCount
+    'getCount': getCount,
+    'getByRequisitionId': findByRequisitionId
   };
 };

@@ -23,7 +23,15 @@ module.exports = function (app) {
     },
     secondaryThmeColor: {
       type: 'string',
-    }
+    },
+    franchiseInventoryLocation: {
+      type: 'string',
+      required: true,
+      allowEmpty: false,
+      'conform': function(value) {
+        return app.utility.checkMongooseObjectId(value);
+      }
+    },
   };
 
   const edit = {
@@ -43,7 +51,15 @@ module.exports = function (app) {
     },
     secondaryThmeColor: {
       type: 'string',
-    }
+    },
+    franchiseInventoryLocation: {
+      type: 'string',
+      required: true,
+      allowEmpty: false,
+      'conform': function(value) {
+        return app.utility.checkMongooseObjectId(value);
+      }
+    },
   };
 
   

@@ -56,6 +56,14 @@ module.exports = function (app, mongoose) {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Menu'
       },
+      excludeGST: {
+        type: Boolean,
+        default: false
+      },
+      excludeServiceCharge: {
+        type: Boolean,
+        default: false
+      },
       subItems: [{
         name: String,
         quantity: Number,
