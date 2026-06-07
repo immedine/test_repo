@@ -16,6 +16,14 @@ module.exports = function(app, mongoose) {
         type: Number,
         default: 0
       },
+      excludeGST: {
+        type: Boolean,
+        default: false
+      },
+      excludeServiceCharge: {
+        type: Boolean,
+        default: false
+      },
       price: {
         type: Number,
         default: 0

@@ -65,24 +65,37 @@ module.exports = function (app) {
                 total,
                 restaurantRef: req.body.restaurantRef,
               };
+
+              let totalForNonGST = 0;
+              req.body.cart.forEach(each => {
+                if (each.excludeGST) {
+                  totalForNonGST += (each.quantity * each.price) || 0;
+                }
+              });
+              let totalForNonServiceCharge = 0;
+              req.body.cart.forEach(each => {
+                if (each.excludeServiceCharge) {
+                  totalForNonServiceCharge += (each.quantity * each.price) || 0;
+                }
+              });
               if (restDetails.gstDetails.gstEnabled) {
-                const cgst = Number(((subTotal * (restDetails.gstDetails.cgst || 0)) / 100).toFixed());
-                const sgst = Number(((subTotal * (restDetails.gstDetails.sgst || 0)) / 100).toFixed());
+                const cgst = Number((((subTotal - totalForNonGST) * (restDetails.gstDetails.cgst || 0)) / 100));
+                const sgst = Number((((subTotal - totalForNonGST) * (restDetails.gstDetails.sgst || 0)) / 100));
                 reqBody.gstDetails = {
                   cgst,
                   sgst,
                   cgstInPercentage: restDetails.gstDetails.cgst,
                   sgstInPercentage: restDetails.gstDetails.sgst,
                 };
-                reqBody.total += cgst + sgst;
+                reqBody.total = Number((reqBody.total + reqBody.gstDetails.cgst + reqBody.gstDetails.sgst).toFixed(2));
               }
               if (restDetails.serviceTaxDetails.serviceTaxEnabled) {
-                const serviceTax = Number(((subTotal * (restDetails.serviceTaxDetails.serviceTax || 0)) / 100).toFixed());
+                const serviceTax = Number((((subTotal - totalForNonServiceCharge) * (restDetails.serviceTaxDetails.serviceTax || 0)) / 100));
                 reqBody.serviceTaxDetails = {
                   serviceTax,
                   serviceTaxInPercentage: restDetails.serviceTaxDetails.serviceTax
                 };
-                reqBody.total += serviceTax;
+                reqBody.total = Number((reqBody.total + reqBody.serviceTaxDetails.serviceTax).toFixed(2));
               }
               // create bill
               bill.create(reqBody)
@@ -134,7 +147,6 @@ module.exports = function (app) {
       .then(async orderData => {
         const oldTableId = orderData.tableRef;
 
-        // console.log("orderData ", orderData)
         let subTotal = 0;
         let total = 0;
 
@@ -148,13 +160,13 @@ module.exports = function (app) {
             each.isNewToCart = false;
             cartToProcess.push(each);
           });
-          
+
           req.body.cart.forEach(newItem => {
             // const existingItem = cartToProcess.find(item => item.menuRef.toString() === newItem.menuRef.toString());
             // if (existingItem) {
             //   existingItem.quantity += newItem.quantity;
             // } else {
-              cartToProcess.push(newItem);
+            cartToProcess.push(newItem);
             // }
           });
         }
@@ -173,7 +185,11 @@ module.exports = function (app) {
         // Update cart in request body for later use
         req.body.cart = cartToProcess;
 
+        subTotal = subTotal + (orderData?.waterDetails?.totalCost || 0);
+
         total = subTotal;
+
+        total = total + (orderData?.parcelDetails?.totalCost || 0);
 
 
         if (req.body && Object.keys(req.body).length) {
@@ -193,24 +209,42 @@ module.exports = function (app) {
             let gstDetails = {};
             let serviceTaxDetails = {};
 
+            let totalForNonGST = orderData?.waterDetails?.totalCost || 0;
+            orderData.cart.forEach(each => {
+              if (each.excludeGST) {
+                totalForNonGST += (each.quantity * each.price) || 0;
+              }
+            });
+            let totalForNonServiceCharge = orderData?.waterDetails?.totalCost || 0;
+            orderData.cart.forEach(each => {
+              if (each.excludeServiceCharge) {
+                totalForNonServiceCharge += (each.quantity * each.price) || 0;
+              }
+            });
+
+            console.log("orderData ", orderData)
+
+
+            console.log("totalForNonGST ", totalForNonGST, " totalForNonServiceCharge ", totalForNonServiceCharge, " subTotal ", subTotal)
+
             if (restDetails.gstDetails.gstEnabled) {
-              const cgst = Number(((subTotal * (restDetails.gstDetails.cgst || 0)) / 100).toFixed());
-              const sgst = Number(((subTotal * (restDetails.gstDetails.sgst || 0)) / 100).toFixed());
+              const cgst = Number((((subTotal + (orderData?.parcelDetails?.totalCost || 0)  - totalForNonGST) * (restDetails.gstDetails.cgst || 0)) / 100));
+              const sgst = Number((((subTotal + (orderData?.parcelDetails?.totalCost || 0)  - totalForNonGST) * (restDetails.gstDetails.sgst || 0)) / 100));
               gstDetails = {
                 cgst,
                 sgst,
                 cgstInPercentage: restDetails.gstDetails.cgst,
                 sgstInPercentage: restDetails.gstDetails.sgst,
               };
-              total += cgst + sgst;
+              total = Number((total + cgst + sgst).toFixed(2));
             }
             if (restDetails.serviceTaxDetails.serviceTaxEnabled) {
-              const serviceTax = Number(((subTotal * (restDetails.serviceTaxDetails.serviceTax || 0)) / 100).toFixed());
+              const serviceTax = Number((((subTotal + (orderData?.parcelDetails?.totalCost || 0)  - totalForNonServiceCharge) * (restDetails.serviceTaxDetails.serviceTax || 0)) / 100));
               serviceTaxDetails = {
                 serviceTax,
                 serviceTaxInPercentage: restDetails.serviceTaxDetails.serviceTax
               };
-              total += serviceTax;
+              total = Number((total + serviceTax).toFixed(2));
             }
 
 

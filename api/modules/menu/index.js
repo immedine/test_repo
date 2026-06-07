@@ -127,7 +127,9 @@ module.exports = function (app) {
               spicy: '$isSpicy',
               available: '$isAvailable',
               images: '$images',
-              restaurantRef: '$restaurantRef'
+              restaurantRef: '$restaurantRef',
+              excludeGST: '$excludeGST',
+              excludeServiceCharge: '$excludeServiceCharge',
             }
           }
         }
