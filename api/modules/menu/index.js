@@ -281,6 +281,139 @@ module.exports = function (app) {
 
   };
 
+  /**
+   * Clones menus from source restaurant to target restaurant (franchise)
+   * Creates categories if not exist and maps menus to them
+   * Optimized for minimal DB calls using bulk operations
+   *
+   * @param  {Object} config  The config object
+   * @param  {Array} config.menuIds - Array of menu IDs to clone
+   * @param  {String} config.restaurantRef - Target restaurant ID (franchise)
+   * @param  {String} config.createdBy - User who is creating the menus
+   * @return {Promise}        The promise with cloned menu results
+   */
+  const cloneMenusToFranchise = async function (config) {
+    const { menuIds, restaurantRef, createdBy } = config;
+
+    // Step 1: Fetch all source menus in a single query
+    const sourceMenus = await Menu.find({
+      _id: { $in: menuIds },
+      status: app.config.contentManagement.menu.active
+    })
+    .populate({
+      path: 'ingredients.inventoryRef',
+      select: 'name quantity unit'
+    })
+    .lean();
+
+    if (!sourceMenus || sourceMenus.length === 0) {
+      return Promise.reject({ errCode: 'SOURCE_MENUS_NOT_FOUND' });
+    }
+
+    // Step 2: Extract unique category names from source menus
+    const categoryNames = [...new Set(sourceMenus.map(m => m.categoryRef).filter(Boolean))];
+
+    // If categoryRef is an object with name, extract it; otherwise assume it's already the name
+    const uniqueCategoryNames = categoryNames.map(cat => {
+      if (typeof cat === 'object' && cat !== null && cat.name) {
+        return cat.name;
+      }
+      return cat;
+    }).filter(Boolean);
+
+    // Step 3: Fetch all existing categories for target restaurant in single query
+    const existingCategories = await Category.find({
+      name: { $in: uniqueCategoryNames },
+      restaurantRef: restaurantRef,
+      status: app.config.contentManagement.category.active
+    }).lean();
+
+    // Create a map for quick lookup: categoryName -> categoryId
+    const categoryMap = new Map();
+    existingCategories.forEach(cat => {
+      categoryMap.set(cat.name.toLowerCase(), cat._id);
+    });
+
+    // Step 4: Identify categories that need to be created
+    const categoriesToCreate = [];
+    uniqueCategoryNames.forEach(catName => {
+      const key = catName.toLowerCase();
+      if (!categoryMap.has(key)) {
+        categoriesToCreate.push({
+          name: catName,
+          restaurantRef: restaurantRef,
+          createdBy: createdBy,
+          filterText: catName.split(' ').slice(0, 2).join(' '),
+          status: app.config.contentManagement.category.active,
+          totalMenu: 0
+        });
+      }
+    });
+
+    // Bulk create missing categories (if any)
+    if (categoriesToCreate.length > 0) {
+      const createdCategories = await Category.insertMany(categoriesToCreate, { ordered: false });
+      createdCategories.forEach(cat => {
+        categoryMap.set(cat.name.toLowerCase(), cat._id);
+      });
+    }
+
+    // Step 5: Build menu clone data with mapped categoryIds
+    const menusToCreate = sourceMenus.map(sourceMenu => {
+      // Get category name from source menu
+      let categoryName;
+      if (typeof sourceMenu.categoryRef === 'object' && sourceMenu.categoryRef !== null) {
+        categoryName = sourceMenu.categoryRef.name;
+      } else {
+        categoryName = sourceMenu.categoryRef;
+      }
+
+      const categoryId = categoryMap.get(categoryName.toLowerCase());
+
+      return {
+        name: sourceMenu.name,
+        order: sourceMenu.order,
+        status: app.config.contentManagement.menu.active,
+        restaurantRef: restaurantRef,
+        createdBy: createdBy,
+        isCreatedByImmeDine: sourceMenu.isCreatedByImmeDine || false,
+        categoryRef: categoryId,
+        price: sourceMenu.price,
+        isVeg: sourceMenu.isVeg,
+        isNonVeg: sourceMenu.isNonVeg,
+        isSpicy: sourceMenu.isSpicy,
+        description: sourceMenu.description,
+        images: sourceMenu.images || [],
+        excludeGST: sourceMenu.excludeGST || false,
+        excludeServiceCharge: sourceMenu.excludeServiceCharge || false,
+        isAvailable: false, // Default to unavailable for franchise to review
+        preparationTime: sourceMenu.preparationTime,
+        availability: sourceMenu.availability,
+        // Clone languages if present
+        languagesRef: sourceMenu.languagesRef || []
+      };
+    }).filter(menu => menu.categoryRef); // Only include menus with valid categoryRef
+
+    // Step 6: Bulk insert all menus
+    const createdMenus = await Menu.insertMany(menusToCreate, { ordered: false });
+
+    // Step 7: Update totalMenu count for created/updated categories
+    const categoryIds = [...new Set(createdMenus.map(m => m.categoryRef.toString()))];
+    if (categoryIds.length > 0) {
+      await Category.updateMany(
+        { _id: { $in: categoryIds } },
+        { $inc: { totalMenu: 1 } }
+      );
+    }
+
+    return Promise.resolve({
+      success: true,
+      createdMenusCount: createdMenus.length,
+      createdCategoriesCount: categoriesToCreate.length,
+      menus: createdMenus
+    });
+  };
+
   return {
     'create': createMenu,
     'get': findMenuById,
@@ -291,6 +424,7 @@ module.exports = function (app) {
     'removeInventoryItem': removeInventoryItem,
     'updateOrderCount': updateOrderCount,
     'updateBulkOrderCount': updateBulkOrderCount,
-    'bulkUpload': bulkUpload
+    'bulkUpload': bulkUpload,
+    'cloneMenusToFranchise': cloneMenusToFranchise
   };
 };

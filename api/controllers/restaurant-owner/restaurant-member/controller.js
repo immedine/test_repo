@@ -121,6 +121,9 @@ module.exports = function(app) {
   const editRestaurantMember = (req, res, next) => {
     req.restaurantOwnerId.personalInfo = req.body.personalInfo;
     req.restaurantOwnerId.roleInfo = req.body.roleInfo;
+    if (typeof req.body.enableStoreLocationTracking === 'boolean') {
+      req.restaurantOwnerId.enableStoreLocationTracking = req.body.enableStoreLocationTracking;
+    }
     restaurantOwner.crud.edit(req.restaurantOwnerId)
       .then(output => {
         return app.module.session.remove(req.restaurantOwnerId._id, app.config.user.role.restaurantOwner)

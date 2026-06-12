@@ -163,6 +163,10 @@ module.exports = function (app, mongoose /*, plugins*/) {
           type: Date
         }
       },
+      enableStoreLocationTracking: {
+        type: Boolean,
+        default: false
+      },
       /**
        * Session Information
        */
@@ -1273,7 +1277,7 @@ module.exports = function (app, mongoose /*, plugins*/) {
               password: password,
             };
             let uniqueCode = app.utility.getRandomCode();
-            console.log("uniqueCode ", uniqueCode)
+            // console.log("uniqueCode ", uniqueCode)
             restaurantOwnerObj.deviceRegistrationCode = uniqueCode;
             return new this(restaurantOwnerObj).save();
           })

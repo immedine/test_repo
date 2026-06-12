@@ -75,9 +75,45 @@ module.exports = function(app) {
   };
 
 
+  /**
+   * Clones menus from source restaurant to a franchise restaurant
+   * @param  {Object}   req  Request
+   * @param  {Object}   res  Response
+   * @param  {Function} next Next is used to pass control to the next middleware function
+   * @return {Promise}       The Promise
+   */
+  const cloneMenusToFranchise = (req, res, next) => {
+    const { menuIds, restaurantRef } = req.body;
+
+    // Validate required fields
+    if (!menuIds || !Array.isArray(menuIds) || menuIds.length === 0) {
+      req.workflow.outcome.errors = [{ message: 'menuIds is required and must be a non-empty array' }];
+      req.workflow.emit('response');
+      return;
+    }
+
+    if (!restaurantRef) {
+      req.workflow.outcome.errors = [{ message: 'restaurantRef is required' }];
+      req.workflow.emit('response');
+      return;
+    }
+
+    menu.cloneMenusToFranchise({
+      menuIds: menuIds,
+      restaurantRef: restaurantRef,
+      createdBy: req.session.user._id
+    })
+      .then(output => {
+        req.workflow.outcome.data = output;
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
   return {
     get: getMenu,
-    list: getMenuList
+    list: getMenuList,
+    cloneMenusToFranchise: cloneMenusToFranchise
   };
 
 };
