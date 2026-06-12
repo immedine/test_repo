@@ -160,13 +160,35 @@ module.exports = function(app) {
     }
   };
 
+  const cloneMenusToFranchise = {
+    'menuIds': {
+      type: 'array',
+      required: true,
+      items: {
+        type: 'string',
+        'conform': function(value) {
+          return app.utility.checkMongooseObjectId(value);
+        }
+      }
+    },
+    'restaurantRef': {
+      type: 'string',
+      required: true,
+      allowEmpty: false,
+      'conform': function(value) {
+        return app.utility.checkMongooseObjectId(value);
+      }
+    }
+  };
+
   return {
     add: addMenu,
     edit: editMenu,
     listQuery: listQuery,
     param: param,
     list: list, 
-    getMenuImages: getMenuImages
+    getMenuImages: getMenuImages,
+    cloneMenusToFranchise: cloneMenusToFranchise
   };
 
 };

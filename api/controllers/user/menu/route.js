@@ -57,14 +57,5 @@ module.exports = function (app, options) {
     ]);
 
 
-  /**
-   * Clones menus from source restaurant to a franchise restaurant
-   */
-  router.post('/clone-menus-to-franchise', [
-    options.validateBody(schemaValidator.cloneMenusToFranchise),
-    controllers.cloneMenusToFranchise
-  ]);
-
-
   return router;
 };

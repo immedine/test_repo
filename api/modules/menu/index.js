@@ -300,10 +300,7 @@ module.exports = function (app) {
       _id: { $in: menuIds },
       status: app.config.contentManagement.menu.active
     })
-    .populate({
-      path: 'ingredients.inventoryRef',
-      select: 'name quantity unit'
-    })
+      .populate('categoryRef', 'name') // Populate category name for mapping
     .lean();
 
     if (!sourceMenus || sourceMenus.length === 0) {
@@ -407,10 +404,7 @@ module.exports = function (app) {
     }
 
     return Promise.resolve({
-      success: true,
-      createdMenusCount: createdMenus.length,
-      createdCategoriesCount: categoriesToCreate.length,
-      menus: createdMenus
+      success: true
     });
   };
 

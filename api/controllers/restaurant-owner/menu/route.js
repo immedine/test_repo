@@ -71,6 +71,14 @@ module.exports = function (app, options) {
   ]);
 
   /**
+   * Clones menus from source restaurant to a franchise restaurant
+   */
+  router.post('/clone-menus-to-franchise', [
+    options.validateBody(schemaValidator.cloneMenusToFranchise),
+    controllers.cloneMenusToFranchise
+  ]);
+
+  /**
    * Fetches a menu, edits a menu and removes a menu
    */
   router.route('/:menuId')
@@ -88,6 +96,8 @@ module.exports = function (app, options) {
     .delete([
       controllers.delete
     ]);
+
+   
 
 
   return router;

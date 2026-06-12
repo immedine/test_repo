@@ -57,32 +57,10 @@ module.exports = function(app) {
     }
   };
 
-  const cloneMenusToFranchise = {
-    'menuIds': {
-      type: 'array',
-      required: true,
-      items: {
-        type: 'string',
-        'conform': function(value) {
-          return app.utility.checkMongooseObjectId(value);
-        }
-      }
-    },
-    'restaurantRef': {
-      type: 'string',
-      required: true,
-      allowEmpty: false,
-      'conform': function(value) {
-        return app.utility.checkMongooseObjectId(value);
-      }
-    }
-  };
-
   return {
     listQuery: listQuery,
     param: param,
-    list: list,
-    cloneMenusToFranchise: cloneMenusToFranchise
+    list: list, 
   };
 
 };
