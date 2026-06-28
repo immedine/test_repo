@@ -5,6 +5,44 @@ const router = require('express').Router();
 
 
 module.exports = function(app) {
+  const options = {
+    /**
+     * File upload handling middleware
+     * @type {Function}
+     */
+    upload: app.utility.upload,
+
+    /**
+     * File upload handling middleware
+     * @type {Function}
+     */
+    uploadFiles: app.utility.uploadFiles,
+    uploadMultipleImages: app.utility.uploadMultipleImages,
+
+
+    /**
+     * Validates the request body
+     * @type {Function}
+     */
+    validateBody: app.utility.apiValidate.body,
+    /**
+     * Validates the request query
+     * @type {Function}
+     */
+    validateQuery: app.utility.apiValidate.query,
+
+    /**
+     * Validates the request param
+     * @type {Function}
+     */
+    validateParams: app.utility.apiValidate.params,
+
+    /**
+     * Validates the request files
+     * @type {Function}
+     */
+    validateFile: app.utility.apiValidate.file,
+  };
   const schemaValidators = {
     common: require('./common/schema-validator')(app),
   };
@@ -37,7 +75,7 @@ module.exports = function(app) {
     admin: require('./admin')(app),
     restaurantOwner: require('./restaurant-owner')(app),
     user: require('./user')(app),
-    common: require('./common/route.js')(app),
+    common: require('./common/route.js')(app, options),
     webhook: require('./webhook/index.js')(app),
   };
 

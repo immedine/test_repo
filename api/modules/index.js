@@ -13,6 +13,7 @@ module.exports = function(app) {
   const language = require('./language')(app);
   const category = require('./category')(app);
   const restaurant = require('./restaurant')(app);
+  const tempRestaurant = require('./tempRestaurant')(app);
   const faq = require('./faq')(app);
   const menu = require('./menu')(app);
   const order = require('./order')(app);
@@ -43,6 +44,7 @@ module.exports = function(app) {
     admin,
     restaurantOwner,
     restaurant,
+    tempRestaurant,
     user,
     notification,
     adminUser,

@@ -23,6 +23,7 @@ module.exports = function (app, options) {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'application/vnd.ms-excel',
     ],
+    localStorage: 'public/uploads/unregistered-restaurant-excel',
   });
 
   /**
@@ -58,6 +59,11 @@ module.exports = function (app, options) {
     options.validateQuery(schemaValidator.listQuery),
     options.validateBody(schemaValidator.list),
     controllers.list
+  ]);
+
+  router.post('/bulk-add', [
+    uploadExcel('excel'),
+    controllers.bulkAdd
   ]);
 
   /**

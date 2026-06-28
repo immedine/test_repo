@@ -25,6 +25,12 @@ module.exports = {
     unPublished: 3,
     inactive: 4
   },
+  tempRestaurant: {
+    active: 1,
+    deleted: 2,
+    unPublished: 3,
+    inactive: 4
+  },
   language: {
     active: 1,
     deleted: 2
@@ -175,5 +181,13 @@ module.exports = {
     inTransit: 4,
     delivered: 5,
     cancelled: 6
+  },
+  requisitionOrderPaymentStatus: {
+    created: 1,
+    paymentPending: 2,
+    paid: 3,
+    failed: 4,
+    cancelled: 5,
+    expired: 6
   }
 };

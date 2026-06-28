@@ -83,6 +83,7 @@ module.exports = function (app, options) {
   ]);
 
   router.post('/signup', [options.validateBody(schemaValidator.signup), controllers.signupRequest]);
+  router.post('/popup-signup', [options.validateBody(schemaValidator.signup), controllers.popupSignupRequest]);
 
   return router;
 };

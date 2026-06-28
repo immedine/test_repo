@@ -39,7 +39,13 @@ module.exports = function (app) {
     let query = {
       skip: Number(req.query.skip) || app.config.page.defaultSkip,
       limit: Number(req.query.limit) || app.config.page.defaultLimit,
-      filters: {},
+      filters: {
+        restaurantWiseVisits: {
+          $elemMatch: {
+            restaurantRef: req.session.user.restaurantRef
+          }
+        }
+      },
       sort: {
         createdAt: -1
       },
@@ -74,7 +80,7 @@ module.exports = function (app) {
   };
 
   const editUser = (req, res, next) => {
-    console.log("req.body ", req.body)
+    // console.log("req.body ", req.body)
     if (req.body && Object.keys(req.body).length) {
       if (req.body.onlyPersonal) {
         for (let prop in req.body.personalInfo) {
@@ -96,7 +102,7 @@ module.exports = function (app) {
 
   const findOrCreateUserByPhone = (req, res, next) => {
 
-    const userData = req.body.contactDetails;
+    const userData = req.body.contactDetails || req.body.personalInfo || req.body;
 
     user.crud.findOrCreateUserByPhone(
       userData.phone.countryCode || "+91",
@@ -104,7 +110,57 @@ module.exports = function (app) {
       userData.fullName
     )
       .then(async output => {
-        order.updateUserDetails(req.body.orderId, output);
+        if (req.body.orderId) {
+          await order.updateUserDetails(req.body.orderId, output);
+          if (output.restaurantWiseVisits && output.restaurantWiseVisits.length) {
+            const restaurantVisit = output.restaurantWiseVisits.find(visit => visit.restaurantRef.toString() === req.session.user.restaurantRef.toString());
+            if (restaurantVisit) {
+              restaurantVisit.visitCount += 1;
+              restaurantVisit.lastVisited = new Date();
+            } else {
+              output.restaurantWiseVisits = [];
+              output.restaurantWiseVisits.push({
+                restaurantRef: req.session.user.restaurantRef,
+                visitCount: 1,
+                lastVisited: new Date(),
+                loyaltyPts: 0
+              });
+            }
+            await user.crud.edit(output);
+          } else {
+            output.restaurantWiseVisits = [{
+              restaurantRef: req.session.user.restaurantRef,
+              visitCount: 1,
+              lastVisited: new Date(),
+              loyaltyPts: 0
+            }];
+            await user.crud.edit(output);
+          }
+        } else {
+          if (output.restaurantWiseVisits && output.restaurantWiseVisits.length) {
+            const restaurantVisit = output.restaurantWiseVisits.find(visit => visit.restaurantRef.toString() === req.session.user.restaurantRef.toString());
+            if (!restaurantVisit) {
+              output.restaurantWiseVisits = [];
+
+              output.restaurantWiseVisits.push({
+                restaurantRef: req.session.user.restaurantRef,
+                visitCount: 0,
+                lastVisited: new Date(),
+                loyaltyPts: 0
+              });
+              await user.crud.edit(output);
+            }
+          } else {
+            output.restaurantWiseVisits = [{
+              restaurantRef: req.session.user.restaurantRef,
+              visitCount: 0,
+              lastVisited: new Date(),
+              loyaltyPts: 0
+            }];
+            await user.crud.edit(output);
+          }
+        }
+
         req.workflow.outcome.data = output;
         req.workflow.emit('response');
       })

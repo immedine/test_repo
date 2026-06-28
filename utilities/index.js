@@ -27,7 +27,7 @@ module.exports = function(app) {
     uploadMultipleImages: require('./upload-multiple-images'),
     errorHandler: require('./errorHandler')(app), // attached as middleware in app
     awsSNS: require('./awsSNS')(app.config.aws.SNS),
-
+    parseMobile: require('./parse-mobile'),
   };
 
   /**

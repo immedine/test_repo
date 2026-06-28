@@ -49,6 +49,7 @@ module.exports = function(app) {
     Admin: db.model('Admin', require('./models/admin')(app, mongoose, plugins)),
     RestaurantOwner: db.model('RestaurantOwner', require('./models/restaurantOwner')(app, mongoose, plugins)),
     Restaurant: db.model('Restaurant', require('./models/restaurant')(app, mongoose, plugins)),
+    TempRestaurant: db.model('TempRestaurant', require('./models/tempRestaurant')(app, mongoose, plugins)),
     User: db.model('User', require('./models/user')(app, mongoose, plugins)),
     Language: db.model('Language', require('./models/language')(app, mongoose, plugins)),
     Category: db.model('Category', require('./models/category')(app, mongoose, plugins)),

@@ -54,6 +54,13 @@ module.exports = function (app, mongoose) {
         type: String,
         default: 'en',
       },
+      restaurantWiseVisits: [{
+        restaurantRef: { type: mongoose.Schema.Types.ObjectId, ref: "Restaurant" },
+        visitCount: { type: Number, default: 0 },
+        lastVisited: { type: Date, default: Date.now },
+        loyaltyPts: { type: Number, default: 0 },
+        totalSpent: { type: Number, default: 0 },
+      }],
       sessionInfo: [{
         deviceId: {
           type: String,

@@ -71,6 +71,7 @@ module.exports = function(app, mongoose) {
     },
 
     webhookEventId: String,
+    paymentType: String, // subscription, requisitionOrder
 
     // ⏱ timestamps
     capturedAt: Date,

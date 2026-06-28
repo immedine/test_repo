@@ -315,6 +315,7 @@ module.exports = function (app) {
         updatedBy: req.session.user._id,
         remarks: 'REQUISITION_ORDER_CREATED'
       }],
+      total: req.requisitionId.total
     })
       .then(output => {
         req.requisitionId.status = app.config.contentManagement.requisitionStatus.ordered;

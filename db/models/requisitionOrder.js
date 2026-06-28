@@ -28,12 +28,27 @@ module.exports = function (app, mongoose) {
         number: { type: String },
       },
     },
+    razorpayOrderId: {
+      type: String
+    },
+    paymentId: {
+      type: String
+    },
+
+    // 🧾 Receipt (what you send to Razorpay)
+    receipt: {
+      type: String
+    },
     vehicleDetails: {
       licensePlate: String
     },
     status: {
       type: Number,
       default: app.config.contentManagement.requisitionOrderStatus.active
+    },
+    paymentStatus: {
+      type: Number,
+      default: app.config.contentManagement.requisitionOrderPaymentStatus.created
     },
     currentLocation: {
       type: { type: String, default: 'Point' },

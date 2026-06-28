@@ -43,7 +43,14 @@ module.exports = function (app) {
     },
   };
 
+  const image = {
+    image: {
+      type: 'object',
+    },
+  };
+
   return {
     contactUs,
+    image,
   };
 };

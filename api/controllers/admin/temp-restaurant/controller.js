@@ -11,7 +11,7 @@ module.exports = function(app) {
    * restaurant Module
    * @type {Object}
    */
-  const restaurant = app.module.restaurant;
+  const restaurant = app.module.tempRestaurant;
 
   /**
    * Session Module
@@ -145,6 +145,11 @@ module.exports = function(app) {
       .catch(next);
   };
 
+  const bulkAdd = (req, res, next) => {
+    req.workflow.outcome.data = req.files.excel.getPath;
+    req.workflow.emit('response');
+    
+  };
 
   return {
     add: addRestaurant,
@@ -152,7 +157,8 @@ module.exports = function(app) {
     edit: editRestaurant,
     list: getRestaurantList,
     delete: deleteRestaurant,
-    changeStatus: changeStatus
+    changeStatus: changeStatus,
+    bulkAdd: bulkAdd
   };
 
 };

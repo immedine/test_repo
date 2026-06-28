@@ -31,6 +31,17 @@ module.exports = function(app) {
       .catch(next);
   };
 
+  const bulkUpload = (req, res, next) => {
+    menu.bulkUpload(req.body.bulkMenu, {
+      restaurantRef: req.body.restaurantRef,
+      _id: req.body.userRef
+    })
+      .then(output => {
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
   /**
    * Fetches a menu
    * @param  {Object}   req  Request 
@@ -212,7 +223,8 @@ module.exports = function(app) {
     delete: deleteMenu,
     bulkAdd: bulkAdd,
     getMenuImages: getMenuImages,
-    cloneMenusToFranchise: cloneMenusToFranchise
+    cloneMenusToFranchise: cloneMenusToFranchise,
+    bulkUpload: bulkUpload
   };
 
 };

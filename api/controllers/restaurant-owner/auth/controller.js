@@ -412,6 +412,60 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const popupSignupRequest = (req, res, next) => {
+    restaurant.create({
+      name: req.body.restaurantDetails.name,
+      introductoryText: req.body.restaurantDetails.introductoryText,
+      status: app.config.contentManagement.restaurant.unPublished
+    })
+      .then((output) => {
+        // req.workflow.outcome.data = output;
+        const data = {
+          personalInfo: {
+            fullName: req.body.ownerDetails.fullName,
+            phone: req.body.ownerDetails.phone,
+            email: req.body.ownerDetails.email,
+            password: req.body.ownerDetails.password
+          },
+          restaurantRef: output._id,
+          from: 'signup'
+        };
+        if (req.body.socialId) {
+          data.socialInfo = [{ socialId: req.body.socialId, socialType: req.body.provider }];
+          data.loginType = app.config.user.loginType[req.body.provider];
+          data.accountStatus = app.config.user.accountStatus.restaurantOwner.active;
+        }
+        restaurantOwner.crud.add(data)
+          .then(async (output1) => {
+            if (output1.user) {
+              if (output1.skip) {
+                await restaurant.set(output._id, {
+                  status: app.config.contentManagement.restaurant.active
+                });
+              }
+              req.workflow.outcome.data = {
+                user: app.utility.format.user(output1.user),
+                skip: output1.skip
+              };
+            } else if (output1.personalInfo) {
+              if (output1.skip) {
+                await restaurant.set(output._id, {
+                  status: app.config.contentManagement.restaurant.active
+                });
+              }
+              req.workflow.outcome.data = {
+                user: app.utility.format.user(output1),
+                skip: output1.skip
+              };
+            } 
+            
+            req.workflow.emit('response');
+          })
+          .catch(next);
+      })
+      .catch(next);
+  };
+
   const verifyToken = (req, res, next) => {
     const { token } = req.body;
     restaurantOwner.auth
@@ -562,6 +616,7 @@ module.exports = function (app) {
     verifyToken: verifyToken,
     verifyRegistrationToken: verifyRegistrationToken,
     signupRequest: signupRequest,
+    popupSignupRequest: popupSignupRequest,
     registerDevice: registerDevice,
     sendVerificationLink
   };

@@ -38,6 +38,7 @@ const controllers = {
    * Admin User Route
    */
   restaurant: require("./restaurant/route"),
+  tempRestaurant: require("./temp-restaurant/route"),
   /**
    * Role Management Route
    */
@@ -147,6 +148,7 @@ module.exports = function(app) {
    */
   privateRouter.use("/restaurant-owner", controllers.restaurantOwner(app, options));
   privateRouter.use("/restaurant", controllers.restaurant(app, options));
+  privateRouter.use("/temp-restaurant", controllers.tempRestaurant(app, options));
   privateRouter.use("/subscription-plan", controllers.subscriptionPlan(app, options));
   /**
    * Role Management Route

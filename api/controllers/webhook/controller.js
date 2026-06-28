@@ -90,6 +90,28 @@ module.exports = function (app) {
               wallet: payment.wallet,
               vpa: payment.vpa,
               rawResponse: payment,
+              paymentType: payment.description
+            });
+          } else if (payment.description === "REQUISITION_PAYMENT") {
+            const reqData = await app.models.RequisitionOrder.findOne({
+              razorpayOrderId: payment.order_id
+            });
+
+            await app.models.Payment.create({
+              orderId: reqData.receipt,
+              razorpayOrderId: payment.order_id,
+              razorpayPaymentId: payment.id,
+              restaurantRef: reqData.requestedByRestaurantRef,
+              userRef: reqData.requestedBy,
+              amount: payment.amount,
+              currency: payment.currency,
+              status: app.config.contentManagement.subscriptionPaymentStatus.authorized,
+              method: payment.method,
+              bank: payment.bank,
+              wallet: payment.wallet,
+              vpa: payment.vpa,
+              rawResponse: payment,
+              paymentType: payment.description
             });
           }
 
@@ -121,6 +143,21 @@ module.exports = function (app) {
             }, {
               subscriptionRef: subData._id
             });
+          } else if (payment.description === "REQUISITION_PAYMENT") {
+            await app.models.Payment.updateOne({
+              razorpayPaymentId: payment.id
+            }, {
+              status: app.config.contentManagement.subscriptionPaymentStatus.captured,
+              capturedAt: new Date(),
+              webhookReceived: true
+            });
+            const reqData = await app.models.RequisitionOrder.findOneAndUpdate({
+              razorpayOrderId: payment.order_id
+            }, {
+              paymentStatus: app.config.contentManagement.requisitionOrderPaymentStatus.paid,
+              paymentId: payment.id
+            });
+
           }
 
           break;
@@ -140,10 +177,25 @@ module.exports = function (app) {
               failedAt: new Date(),
               webhookReceived: true
             });
-            const subData = await app.models.Subscription.findOneAndUpdate({
+            await app.models.Subscription.findOneAndUpdate({
               razorpayOrderId: payment.order_id
             }, {
               status: app.config.contentManagement.subscriptionStatus.failed,
+              paymentId: payment.id
+            });
+
+          } else if (payment.description === "REQUISITION_PAYMENT") {
+            await app.models.Payment.updateOne({
+              razorpayPaymentId: payment.id
+            }, {
+              status: app.config.contentManagement.subscriptionPaymentStatus.failed,
+              failedAt: new Date(),
+              webhookReceived: true
+            });
+            await app.models.RequisitionOrder.findOneAndUpdate({
+              razorpayOrderId: payment.order_id
+            }, {
+              paymentStatus: app.config.contentManagement.requisitionOrderPaymentStatus.failed,
               paymentId: payment.id
             });
 

@@ -6,7 +6,7 @@
  */
 const router = require('express').Router();
 
-module.exports = function (app) {
+module.exports = function (app, options) {
   /**
    * The JSON-Schema for these APIs
    * @type {Object}
@@ -18,9 +18,16 @@ module.exports = function (app) {
    */
   const controllers = require('./controller')(app);
   const resControllers = require('../user/restaurant/controller')(app);
+  const menuControllers = require('../restaurant-owner/menu/controller')(app);
   const subsControllers = require('../restaurant-owner/subscription-plan/controller')(app);
 
   const commonMiddlewares = require('./middleware')(app);
+
+  const uploadImage = options.upload(app, {
+    useS3: true,
+    useFileFilter: true,
+    allowedFileTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'],
+  });
 
 
   router.get('/global-config', controllers.getGlobalConfig);
@@ -39,6 +46,20 @@ module.exports = function (app) {
 
   router.post('/subscription-list', [
     subsControllers.list
+  ]);
+
+  router.post('/menu/bulk-upload', [
+    menuControllers.bulkUpload
+  ]);
+
+  router.post('/upload-image', [
+    uploadImage('image'),
+    options.validateFile(schemaValidator.image),
+    controllers.uploadImage,
+  ]);
+
+  router.post('/extract-menu-public', [
+    controllers.extractMenu,
   ]);
 
   return {

@@ -38,7 +38,7 @@ module.exports = function (app) {
    * @return {Promise}              The promise
    */
   const editUser = function (editedUserDoc) {
-    console.log("editedUserDoc ", editedUserDoc)
+    // console.log("editedUserDoc ", editedUserDoc)
     return User.exists({
       'personalInfo.phone': editedUserDoc.personalInfo.phone.number,
       '_id': {
@@ -61,6 +61,10 @@ module.exports = function (app) {
     return userDoc.populate({
       path: 'roleInfo.roleId'
     })
+  };
+
+  const getUserById = function (userId) {
+    return User.findById(userId);
   };
 
   /**
@@ -122,6 +126,7 @@ module.exports = function (app) {
     'remove': removeUser,
     'get': getUser,
     'changeStatus': changeStatus,
-    'findOrCreateUserByPhone': findOrCreateUserByPhone
+    'findOrCreateUserByPhone': findOrCreateUserByPhone,
+    'getById': getUserById
   };
 };
