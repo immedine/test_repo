@@ -49,25 +49,26 @@ module.exports = function (app) {
       sort: {
         createdAt: -1
       },
-      keys: "personalInfo accountStatus createdAt"
+      keys: "personalInfo accountStatus createdAt restaurantWiseVisits",
+      restaurantRef: req.session.user.restaurantRef
     };
 
-    if (req.body.filters) {
-      let { firstName, lastName, email } = req.body.filters;
-      if (firstName) {
-        query.filters.personalInfo.firstName = new RegExp(`^${firstName}`, 'ig');
+    if (req.body.filters && Object.keys(req.body.filters).length) {
+      let { fullName, phoneNumber } = req.body.filters;
+      if (fullName) {
+        query.filters["personalInfo.fullName"] = new RegExp(`^${fullName}`, 'ig');
       }
-      if (lastName) {
-        query.filters.personalInfo.lastName = new RegExp(`^${lastName}`, 'ig');
-      }
-      if (email) {
-        query.filters.personalInfo.email = new RegExp(`^${email}`, 'ig');
+      if (phoneNumber) {
+        query.filters["personalInfo.phone.number"] = new RegExp(`^${phoneNumber}`, 'ig');
       }
     }
-    if (req.body.sortConfig) {
-      let { firstName } = req.body.sortConfig;
-      if (firstName) {
-        query.sort.firstName = firstName;
+    if (req.body.sortConfig && Object.keys(req.body.sortConfig).length) {
+      query.sort = {};
+      let { visitCount, lastVisited } = req.body.sortConfig;
+      if (visitCount) {
+        query.sort['restaurantVisit.visitCount'] = visitCount;
+      } else if (lastVisited) {
+        query.sort['restaurantVisit.lastVisited'] = lastVisited;
       }
     }
 
@@ -80,7 +81,6 @@ module.exports = function (app) {
   };
 
   const editUser = (req, res, next) => {
-    // console.log("req.body ", req.body)
     if (req.body && Object.keys(req.body).length) {
       if (req.body.onlyPersonal) {
         for (let prop in req.body.personalInfo) {
@@ -118,7 +118,7 @@ module.exports = function (app) {
               restaurantVisit.visitCount += 1;
               restaurantVisit.lastVisited = new Date();
             } else {
-              output.restaurantWiseVisits = [];
+              output.restaurantWiseVisits = output.restaurantWiseVisits || [];
               output.restaurantWiseVisits.push({
                 restaurantRef: req.session.user.restaurantRef,
                 visitCount: 1,
@@ -140,7 +140,7 @@ module.exports = function (app) {
           if (output.restaurantWiseVisits && output.restaurantWiseVisits.length) {
             const restaurantVisit = output.restaurantWiseVisits.find(visit => visit.restaurantRef.toString() === req.session.user.restaurantRef.toString());
             if (!restaurantVisit) {
-              output.restaurantWiseVisits = [];
+              output.restaurantWiseVisits = output.restaurantWiseVisits || [];
 
               output.restaurantWiseVisits.push({
                 restaurantRef: req.session.user.restaurantRef,

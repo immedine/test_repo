@@ -31,6 +31,7 @@ module.exports = function(app) {
   const query = require('./query')(app);
   const batch = require('./batch')(app);
   const expense = require('./expense')(app);
+  const kot = require('./kot')(app);
   const tableSession = require('./tableSession')(app);
   const imageByAI = require('./imageByAI')(app);
   const cron = require('./cron')(app)();
@@ -68,6 +69,7 @@ module.exports = function(app) {
     requisition,
     requisitionOrder,
     salesHistory,
-    batch
+    batch,
+    kot
   };
 };

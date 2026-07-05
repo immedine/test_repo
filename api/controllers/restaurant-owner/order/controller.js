@@ -3,6 +3,159 @@
  * This Controller handles all functionality of admin order
  * @module Controllers/Admin/order
  */
+// Helper function to compare subItems and return differences with correct operations
+const getSubItemChanges = (oldSubItems, newSubItems, menuRef, itemQuantityDiff = 0) => {
+  const changes = [];
+  const oldSubItemsArr = oldSubItems || [];
+  const newSubItemsArr = newSubItems || [];
+  const oldSubItemNames = oldSubItemsArr.map(s => s.name);
+  const newSubItemNames = newSubItemsArr.map(s => s.name);
+
+  // Add new subItems (in new but not in old) - add the difference quantity
+  newSubItemsArr.forEach(sub => {
+    if (!oldSubItemNames.includes(sub.name)) {
+      changes.push({
+        menuRef: menuRef,
+        name: sub.name,
+        quantity: sub.quantity,
+        price: sub.price,
+        operation: 'add'
+      });
+    }
+  });
+
+  // Check for quantity changes in existing subItems (same name but different quantity) - add/remove difference only
+  newSubItemsArr.forEach(newSub => {
+    const oldSub = oldSubItemsArr.find(s => s.name === newSub.name);
+    if (oldSub && oldSub.quantity !== newSub.quantity) {
+      const quantityDiff = Math.abs(newSub.quantity - oldSub.quantity);
+      changes.push({
+        menuRef: menuRef,
+        name: newSub.name,
+        quantity: quantityDiff,
+        price: newSub.price,
+        operation: newSub.quantity > oldSub.quantity ? 'add' : 'remove'
+      });
+    }
+  });
+
+  // Remove old subItems (in old but not in new) - remove full quantity
+  oldSubItemsArr.forEach(sub => {
+    if (!newSubItemNames.includes(sub.name)) {
+      changes.push({
+        menuRef: menuRef,
+        name: sub.name,
+        quantity: sub.quantity,
+        price: sub.price,
+        operation: 'remove'
+      });
+    }
+  });
+
+  return changes;
+};
+
+// Function to generate KOT items by comparing old order items with new cart items
+const generateKOTItems = (oldOrderItems, newCart) => {
+  const kotItems = [];
+
+  // Check for new items and quantity increases
+  newCart.forEach(newItem => {
+    const oldItem = oldOrderItems.find(old =>
+      old.menuRef && newItem.menuRef && old.menuRef.toString() === newItem.menuRef.toString()
+    );
+
+    if (!oldItem) {
+      // New item added - add full quantity
+      kotItems.push({
+        menuRef: newItem.menuRef,
+        menuName: newItem.name,
+        quantity: newItem.quantity,
+        operation: 'add',
+        subItems: newItem.subItems ? newItem.subItems.map(sub => ({
+          menuRef: newItem.menuRef,
+          name: sub.name,
+          quantity: sub.quantity,
+          price: sub.price,
+          operation: 'add'
+        })) : []
+      });
+    } else if (newItem.quantity > oldItem.quantity) {
+      // Quantity increased - add the difference only
+      const quantityDiff = newItem.quantity - oldItem.quantity;
+      // Get subItem changes comparing old vs new (passing quantityDiff for proportional calculation)
+      const subItemChanges = getSubItemChanges(oldItem.subItems, newItem.subItems, newItem.menuRef, quantityDiff);
+      kotItems.push({
+        menuRef: newItem.menuRef,
+        menuName: newItem.name,
+        quantity: quantityDiff,
+        operation: 'add',
+        subItems: subItemChanges.length > 0 ? subItemChanges : (newItem.subItems ? newItem.subItems.map(sub => ({
+          menuRef: newItem.menuRef,
+          name: sub.name,
+          quantity: sub.quantity,
+          price: sub.price,
+          operation: 'add'
+        })) : [])
+      });
+    } else if (newItem.quantity === oldItem.quantity) {
+      // Quantity same - check for subItem changes only (only add subItems, not the item itself)
+      const subItemChanges = getSubItemChanges(oldItem.subItems, newItem.subItems, newItem.menuRef);
+      if (subItemChanges.length > 0) {
+        // Only add subItems to KOT, not the item with quantity 0
+        subItemChanges.forEach(subChange => {
+          kotItems.push({
+            menuRef: subChange.menuRef,
+            menuName: subChange.name,
+            quantity: subChange.quantity,
+            operation: subChange.operation,
+            subItems: [],
+            isSubItemOnly: true
+          });
+        });
+      }
+    }
+  });
+
+  // Check for removed items and quantity decreases
+  oldOrderItems.forEach(oldItem => {
+    const newItem = newCart.find(newItem =>
+      newItem.menuRef && oldItem.menuRef && newItem.menuRef.toString() === oldItem.menuRef.toString()
+    );
+
+    if (!newItem) {
+      // Item completely removed - remove full quantity
+      kotItems.push({
+        menuRef: oldItem.menuRef,
+        menuName: oldItem.name,
+        quantity: oldItem.quantity,
+        operation: 'remove',
+        subItems: oldItem.subItems ? oldItem.subItems.map(sub => ({
+          menuRef: oldItem.menuRef,
+          name: sub.name,
+          quantity: sub.quantity,
+          price: sub.price,
+          operation: 'remove'
+        })) : []
+      });
+    } else if (oldItem.quantity > newItem.quantity) {
+      // Quantity decreased - remove the difference only
+      const quantityDiff = oldItem.quantity - newItem.quantity;
+      // Get subItem changes comparing old vs new (passing quantityDiff for proportional calculation)
+      const subItemChanges = getSubItemChanges(oldItem.subItems, newItem.subItems, oldItem.menuRef, quantityDiff);
+      kotItems.push({
+        menuRef: oldItem.menuRef,
+        menuName: oldItem.name,
+        quantity: quantityDiff,
+        operation: 'remove',
+        subItems: subItemChanges
+      });
+    }
+  });
+
+  return kotItems;
+};
+
 module.exports = function (app) {
   const mongoose = require('mongoose');
 
@@ -20,6 +173,7 @@ module.exports = function (app) {
   const notification = app.module.notification;
   const menu = app.module.menu;
   const user = app.module.user;
+  const kot = app.module.kot;
 
   /**
    * Adds a order
@@ -35,6 +189,23 @@ module.exports = function (app) {
           .then(output1 => {
             order.create(req.body, req.session.user)
               .then(output => {
+
+                // Create KOT with cart items
+                const kotItems = req.body.cart.map(item => ({
+                  menuRef: item.menuRef,
+                  menuName: item.name,
+                  quantity: item.quantity,
+                  operation: 'add'
+                }));
+
+                kot.create({
+                  orderRef: output._id,
+                  restaurantRef: req.session.user.restaurantRef,
+                  items: kotItems
+                }, req.session.user).catch(err => {
+                  console.log('err creating KOT ', err);
+                });
+
                 bill.create({
                   offlineId: req.body.idbId,
                   billNo: output.orderId,
@@ -894,6 +1065,7 @@ module.exports = function (app) {
     order.getOrderByIdbId(req.params.orderId, req.session.user)
       .then(async orderData => {
         const oldTableId = orderData.tableRef;
+        const oldOrderDataItems = [...orderData.cart]; 
 
         orderData.reOrderCount = orderData.reOrderCount ? orderData.reOrderCount + 1 : 1;
 
@@ -922,6 +1094,21 @@ module.exports = function (app) {
                   gstDetails: req.body.gstDetails,
                   serviceTaxDetails: req.body.serviceTaxDetails
                 });
+
+                // Generate KOT items by comparing old order items with new cart items
+                const kotItems = generateKOTItems(oldOrderDataItems, req.body.cart || []);
+
+                // Create KOT if there are new or updated items
+                if (kotItems.length > 0) {
+                  kot.create({
+                    orderRef: orderData._id,
+                    restaurantRef: req.session.user.restaurantRef,
+                    items: kotItems
+                  }, req.session.user).catch(err => {
+                    console.log('err creating KOT ', err);
+                  });
+                }
+
 
                 let inAppNotification = app.config.notification.inApp(app, app.config.lang.defaultLanguage);
 
@@ -1196,6 +1383,15 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const getKotsByOrderId = (req, res, next) => {
+    kot.getByOrder(req.params.orderId, req.session.user)
+      .then(output => {
+        req.workflow.outcome.data = output;
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
   return {
     add: addOrder,
     get: getOrder,
@@ -1210,7 +1406,8 @@ module.exports = function (app) {
     updateByIdbId: updateByIdbId,
     getOngoingOrderList: getOngoingOrderList,
     updateCartByIdbId: updateCartByIdbId,
-    updateNote: updateNote
+    updateNote: updateNote,
+    getKotsByOrderId: getKotsByOrderId
   };
 
 };

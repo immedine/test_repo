@@ -67,6 +67,10 @@ module.exports = function (app, options) {
     controllers.getByIdbId
   ]);
 
+  router.get('/get-kots/:orderId', [
+    controllers.getKotsByOrderId
+  ]);
+
   router.put('/update-by-idbid/:orderId', [
     controllers.updateByIdbId
   ]);
