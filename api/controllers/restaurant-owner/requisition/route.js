@@ -82,6 +82,12 @@ module.exports = function (app, options) {
     controllers.requisitionOrderDelivered
   ]);
 
+  router.put('/delete-order-popup-close/:orderId', [
+    options.validateParams(schemaValidator.orderIdParam),
+    commonMiddlewares.validateId('RequisitionOrder', 'orderId'),
+    controllers.requisitionOrderDeletedForPopup
+  ]);
+
   router.put('/dispatch-order/:orderId', [
     options.validateParams(schemaValidator.orderIdParam),
     commonMiddlewares.validateId('RequisitionOrder', 'orderId'),

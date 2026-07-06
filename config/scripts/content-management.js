@@ -180,7 +180,8 @@ module.exports = {
     driverAssigned: 3,
     inTransit: 4,
     delivered: 5,
-    cancelled: 6
+    cancelled: 6,
+    deletedDueToPopupClose: 7
   },
   requisitionOrderPaymentStatus: {
     created: 1,

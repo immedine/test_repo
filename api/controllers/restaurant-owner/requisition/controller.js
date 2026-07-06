@@ -1,4 +1,7 @@
 'use strict';
+
+const { paymentStatus } = require("../../../../config/scripts/content-management");
+
 /**
  * This Controller handles all functionality of admin requisition
  * @module Controllers/Admin/requisition
@@ -354,7 +357,25 @@ module.exports = function (app) {
 
       requisitionDetails.status = app.config.contentManagement.requisitionStatus.completed;
 
-      await requisition.edit(requisitionDetails, req.session.user);;
+      await requisition.edit(requisitionDetails, req.session.user);
+
+      req.workflow.emit('response');
+    } catch (error) {
+      next(error); // ✅ this is critical
+    }
+  };
+
+  const requisitionOrderDeletedForPopup = async (req, res, next) => {
+    try {
+      req.orderId.status = app.config.contentManagement.requisitionOrderStatus.deletedDueToPopupClose;
+
+      req.orderId.history.push({
+        status: app.config.contentManagement.requisitionOrderStatus.deletedDueToPopupClose,
+        updatedBy: req.session.user._id,
+        remarks: 'REQUISITION_ORDER_DELETED_DUE_TO_POP_UP_CLOSING'
+      });
+
+      await requisitionOrder.edit(req.orderId, req.session.user);
 
       req.workflow.emit('response');
     } catch (error) {
@@ -499,8 +520,12 @@ module.exports = function (app) {
       skip: Number(req.query.skip) || app.config.page.defaultSkip,
       limit: Number(req.query.limit) || app.config.page.defaultLimit,
       filters: {
-        // status: app.config.contentManagement.requisitionStatus.active,
-        requestedByRestaurantRef: req.session.user.restaurantRef
+        requestedByRestaurantRef: req.session.user.restaurantRef,
+        status: {'$ne': app.config.contentManagement.requisitionOrderStatus.deletedDueToPopupClose},
+        paymentStatus: {'$nin': [
+          app.config.contentManagement.requisitionOrderPaymentStatus.created,
+          app.config.contentManagement.requisitionOrderPaymentStatus.paymentPending
+        ]}
       },
       sort: {
         createdAt: -1
@@ -592,6 +617,7 @@ module.exports = function (app) {
     approveRejectRequisition: approveRejectRequisition,
     createRequisitionOrder: createRequisitionOrder,
     requisitionOrderDelivered: requisitionOrderDelivered,
+    requisitionOrderDeletedForPopup: requisitionOrderDeletedForPopup,
     dispatchRequisitionOrderByAdmin: dispatchRequisitionOrderByAdmin,
     assignDriverToRequisitionOrderByAdmin: assignDriverToRequisitionOrderByAdmin,
     readyToTransitRequisitionOrderByAdmin: readyToTransitRequisitionOrderByAdmin,
