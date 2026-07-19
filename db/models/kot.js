@@ -38,6 +38,10 @@ module.exports = function (app, mongoose) {
         name: String,
         quantity: Number,
         price: Number,
+        menuRef: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Menu'
+        },
         operation: {
           type: String,
           enum: ['add', 'remove', 'update'],

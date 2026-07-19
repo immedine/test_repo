@@ -224,6 +224,78 @@ module.exports = function (app) {
     }
   };
 
+  const verifyOtp = {
+    'otp': {
+      type: 'string',
+      required: true,
+      allowEmpty: false
+    }
+  };
+  const requisitionOrderDelivered = {
+    'deliveryImages': {
+      type: 'array',
+      required: true,
+      allowEmpty: false,
+      items: {
+        type: 'object',
+        properties: {
+          'url': {
+            type: 'string',
+            required: true,
+            allowEmpty: false
+          },
+          'items': {
+            type: 'array'
+          }
+        }
+      }
+    },
+    'deliveryLocation': {
+      type: 'object',
+      required: true,
+      properties: {
+        'type': {
+          type: 'string',
+          default: 'Point'
+        },
+        'coordinates': {
+          type: 'array',
+          required: true,
+          allowEmpty: false,
+          items: {
+            type: 'number'
+          }
+        }
+      }
+    }
+  };
+
+  const requisitionOrderReturn = {
+    'returnImages': {
+      type: 'array',
+      required: true,
+      allowEmpty: false,
+      items: {
+        type: 'object',
+        properties: {
+          'url': {
+            type: 'string',
+            required: true,
+            allowEmpty: false
+          },
+          'items': {
+            type: 'array'
+          },
+          returnType: {
+            type: 'number',
+            required: true,
+            allowEmpty: false
+          }
+        }
+      }
+    }
+  };
+
   return {
     add: addRequisition,
     edit: addRequisition,
@@ -232,7 +304,10 @@ module.exports = function (app) {
     orderIdParam: orderIdParam,
     list: list,
     assignDriverToRequisitionOrderByAdmin: assignDriverToRequisitionOrderByAdmin,
-    readyToTransitRequisitionOrderByAdmin: readyToTransitRequisitionOrderByAdmin
+    readyToTransitRequisitionOrderByAdmin: readyToTransitRequisitionOrderByAdmin,
+    verifyOtp: verifyOtp,
+    requisitionOrderDelivered: requisitionOrderDelivered,
+    requisitionOrderReturn: requisitionOrderReturn
   };
 
 };

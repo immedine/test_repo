@@ -181,7 +181,10 @@ module.exports = {
     inTransit: 4,
     delivered: 5,
     cancelled: 6,
-    deletedDueToPopupClose: 7
+    deletedDueToPopupClose: 7,
+    otpVerified: 8,
+    returned: 9,
+    returnedStatusUpdated: 10
   },
   requisitionOrderPaymentStatus: {
     created: 1,
@@ -190,5 +193,14 @@ module.exports = {
     failed: 4,
     cancelled: 5,
     expired: 6
+  },
+  requisitionReturnType: {
+    grn: 1,
+    gvn: 2
+  },
+  requisitionReturnStatus: {
+    initiated: 1,
+    approved: 2,
+    rejected: 3
   }
 };

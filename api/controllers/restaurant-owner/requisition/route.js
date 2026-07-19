@@ -76,10 +76,32 @@ module.exports = function (app, options) {
     controllers.createRequisitionOrder
   ]);
 
+  router.post('/verify-order-otp/:orderId', [
+    options.validateParams(schemaValidator.orderIdParam),
+    options.validateBody(schemaValidator.verifyOtp),
+    commonMiddlewares.validateId('RequisitionOrder', 'orderId'),
+    controllers.verifyOtp
+  ]);
+
   router.put('/order-delivered/:orderId', [
     options.validateParams(schemaValidator.orderIdParam),
+    options.validateBody(schemaValidator.requisitionOrderDelivered),
     commonMiddlewares.validateId('RequisitionOrder', 'orderId'),
     controllers.requisitionOrderDelivered
+  ]);
+
+  router.put('/return-order/:orderId', [
+    options.validateParams(schemaValidator.orderIdParam),
+    options.validateBody(schemaValidator.requisitionOrderReturn),
+    commonMiddlewares.validateId('RequisitionOrder', 'orderId'),
+    controllers.requisitionOrderReturn
+  ]);
+
+  router.put('/approve-reject-return-order/:orderId', [
+    options.validateParams(schemaValidator.orderIdParam),
+    options.validateBody(schemaValidator.requisitionOrderReturn),
+    commonMiddlewares.validateId('RequisitionOrder', 'orderId'),
+    controllers.approveRejectRequisitionOrderReturn
   ]);
 
   router.put('/delete-order-popup-close/:orderId', [

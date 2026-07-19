@@ -63,6 +63,14 @@ module.exports = function (app) {
    */
   const findKOTByOrderId = function (orderId, userRef) {
     return KOT.find({ orderRef: orderId })
+      .populate({
+        path: 'items.subItems.menuRef',
+        select: 'name _id'
+      })
+      .populate({
+        path: 'items.menuRef',
+        select: 'name _id'
+      })
       .then(kotDetails => {
         if (userRef && kotDetails.length > 0) {
           const hasAccess = kotDetails.every(kot =>

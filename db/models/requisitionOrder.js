@@ -54,6 +54,48 @@ module.exports = function (app, mongoose) {
       type: { type: String, default: 'Point' },
       coordinates: [Number], // [longitude, latitude]
     },
+    deliveryOtp: String,
+    deliveryOtpVeified: {
+      type: Boolean,
+      default: false
+    },
+    deliveryImages: [{
+      url: String,
+      items: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Inventory'
+      }]
+    }],
+    returnImages: [{
+      url: String,
+      items: [{
+        itemRef: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Inventory'
+        },
+        quantity: Number,
+        remainingQuantity: Number
+      }],
+      totalAmount: {
+        type: Number,
+        default: 0
+      },
+      returnType: Number,
+      date: {
+        type: Date,
+        default: Date.now
+      },
+      status: {
+        type: Number,
+        default: app.config.contentManagement.requisitionReturnStatus.initiated
+      },
+      commentsForReturn: String,
+      commentsByAdmin: String
+    }],
+    deliveryLocation: {
+      type: { type: String, default: 'Point' },
+      coordinates: [Number], // [longitude, latitude]
+    },
     history: [{
       status: Number,
       updatedBy: {

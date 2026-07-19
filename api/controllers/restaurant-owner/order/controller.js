@@ -90,13 +90,7 @@ const generateKOTItems = (oldOrderItems, newCart) => {
         menuName: newItem.name,
         quantity: quantityDiff,
         operation: 'add',
-        subItems: subItemChanges.length > 0 ? subItemChanges : (newItem.subItems ? newItem.subItems.map(sub => ({
-          menuRef: newItem.menuRef,
-          name: sub.name,
-          quantity: sub.quantity,
-          price: sub.price,
-          operation: 'add'
-        })) : [])
+        subItems: subItemChanges
       });
     } else if (newItem.quantity === oldItem.quantity) {
       // Quantity same - check for subItem changes only (only add subItems, not the item itself)
@@ -191,12 +185,22 @@ module.exports = function (app) {
               .then(output => {
 
                 // Create KOT with cart items
-                const kotItems = req.body.cart.map(item => ({
-                  menuRef: item.menuRef,
-                  menuName: item.name,
-                  quantity: item.quantity,
-                  operation: 'add'
-                }));
+                const kotItems = req.body.cart.map(item => {
+                  const obj = {
+                    menuRef: item.menuRef,
+                    menuName: item.name,
+                    quantity: item.quantity,
+                    operation: 'add',
+                    subItems: item.subItems ? item.subItems.map(sub => ({
+                      menuRef: item.menuRef,
+                      name: sub.name,
+                      quantity: sub.quantity,
+                      price: sub.price,
+                      operation: 'add'
+                    })) : []
+                  };
+                  return obj;
+                });
 
                 kot.create({
                   orderRef: output._id,
@@ -1065,7 +1069,7 @@ module.exports = function (app) {
     order.getOrderByIdbId(req.params.orderId, req.session.user)
       .then(async orderData => {
         const oldTableId = orderData.tableRef;
-        const oldOrderDataItems = [...orderData.cart]; 
+        const oldOrderDataItems = [...orderData.cart];
 
         orderData.reOrderCount = orderData.reOrderCount ? orderData.reOrderCount + 1 : 1;
 

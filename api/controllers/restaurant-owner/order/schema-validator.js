@@ -59,7 +59,7 @@ module.exports = function(app) {
   const updateNote = {
     'note': {
       type: 'string',
-      allowEmpty: false,
+      // allowEmpty: false,
       required: true
     },
   };

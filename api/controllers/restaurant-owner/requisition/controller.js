@@ -332,9 +332,58 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const requisitionOrderReturn = async (req, res, next) => {
+    try {
+
+      req.orderId.returnImages = req.body.returnImages;
+
+      req.orderId.history.push({
+        status: app.config.contentManagement.requisitionOrderStatus.returned,
+        updatedBy: req.session.user._id,
+        remarks: 'REQUISITION_ORDER_RETURNED',
+        comments: req.body.comments
+      });
+
+      await requisitionOrder.edit(req.orderId, req.session.user);
+
+      req.workflow.emit('response');
+    } catch (error) {
+      next(error); // ✅ this is critical
+    }
+  };
+
+  const approveRejectRequisitionOrderReturn = async (req, res, next) => {
+    try {
+
+      req.orderId.returnImages = req.body.returnImages;
+
+      req.orderId.history.push({
+        status: app.config.contentManagement.requisitionOrderStatus.returnedStatusUpdated,
+        updatedBy: req.session.user._id,
+        remarks: 'REQUISITION_ORDER_RETURN_STATUS_UPDATED',
+        comments: req.body.comments
+      });
+
+      await requisitionOrder.edit(req.orderId, req.session.user);
+
+      req.workflow.emit('response');
+    } catch (error) {
+      next(error); // ✅ this is critical
+    }
+  };
+
   const requisitionOrderDelivered = async (req, res, next) => {
     try {
+
+      if (!req.orderId.deliveryOtpVeified) {
+        return next({ 'errCode': 'REQUISITION_OTP_NOT_VERIFIED' });
+      }
+
       req.orderId.status = app.config.contentManagement.requisitionOrderStatus.delivered;
+
+      req.orderId.deliveryImages = req.body.deliveryImages;
+
+      req.orderId.deliveryLocation = req.body.deliveryLocation;
 
       req.orderId.history.push({
         status: app.config.contentManagement.requisitionOrderStatus.delivered,
@@ -358,6 +407,27 @@ module.exports = function (app) {
       requisitionDetails.status = app.config.contentManagement.requisitionStatus.completed;
 
       await requisition.edit(requisitionDetails, req.session.user);
+
+      req.workflow.emit('response');
+    } catch (error) {
+      next(error); // ✅ this is critical
+    }
+  };
+
+  const verifyOtp = async (req, res, next) => {
+    try {
+      if (req.orderId.deliveryOtp !== req.body.otp) {
+        return next({ 'errCode': 'REQUISITION_OTP_INVALID' });
+      }
+      req.orderId.deliveryOtpVeified = true;
+
+      req.orderId.history.push({
+        status: app.config.contentManagement.requisitionOrderStatus.otpVerified,
+        updatedBy: req.session.user._id,
+        remarks: 'REQUISITION_ORDER_OTP_VERIFIED'
+      });
+
+      await requisitionOrder.edit(req.orderId, req.session.user);
 
       req.workflow.emit('response');
     } catch (error) {
@@ -485,6 +555,7 @@ module.exports = function (app) {
     req.orderId.status = app.config.contentManagement.requisitionOrderStatus.inTransit;
     req.orderId.driverDetails = req.body.driverDetails || req.orderId.driverDetails;
     req.orderId.vehicleDetails = req.body.vehicleDetails || req.orderId.vehicleDetails;
+    req.orderId.deliveryOtp = app.utility.getRandomCodeNumber(4);
 
     req.orderId.history.push({
       status: app.config.contentManagement.requisitionOrderStatus.inTransit,
@@ -624,7 +695,10 @@ module.exports = function (app) {
     getAllRequisitionList: getAllRequisitionList,
     getRequisitionOrderList: getRequisitionOrderList,
     getAllRequisitionOrderList: getAllRequisitionOrderList,
-    getRequisitionOrder: getRequisitionOrder
+    getRequisitionOrder: getRequisitionOrder,
+    verifyOtp: verifyOtp,
+    requisitionOrderReturn: requisitionOrderReturn,
+    approveRejectRequisitionOrderReturn: approveRejectRequisitionOrderReturn
   };
 
 };
