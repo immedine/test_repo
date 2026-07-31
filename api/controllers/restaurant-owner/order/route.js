@@ -48,6 +48,12 @@ module.exports = function (app, options) {
     controllers.syncMaster
   ]);
 
+  
+  router.post('/order-otp-list', [
+    // options.validateBody(schemaValidator.add),
+    controllers.getOrderOtpList
+  ]);
+
   /**
    * Fetches a list of orders
    */
@@ -61,6 +67,12 @@ module.exports = function (app, options) {
     options.validateQuery(schemaValidator.listQuery),
     options.validateBody(schemaValidator.list),
     controllers.getOngoingOrderList
+  ]);
+
+  router.put('/mark-done/:otpId', [
+    options.validateParams(schemaValidator.otpParam),
+    commonMiddlewares.validateId('TempOTP', 'otpId'),
+    controllers.markAsDone
   ]);
 
   router.get('/get-by-idbid/:orderId', [

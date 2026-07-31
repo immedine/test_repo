@@ -208,6 +208,9 @@ module.exports = function(app) {
    * @memberOf utility
    */
   utility.removeFile = function(link, callback) {
+    if (!link.includes('https://')) {
+      link = `https://${app.config.aws.s3.bucket}.s3.${app.config.aws.s3.region}.amazonaws.com/${link}`;
+    }
     link = link.substr(link.indexOf('//') + 2);
 
     if (callback && typeof callback === 'function') {

@@ -111,6 +111,10 @@ module.exports = {
           body: (id, staffName) => `${app.config.lang[selectedLang].inApp.toRestaurantOwner.billPaid.body(id, staffName)}`,
           type: "billPaid",
         },
+        newOTPRequest: {
+          body: () => `${app.config.lang[selectedLang].inApp.toRestaurantOwner.newOTPRequest.body()}`,
+          type: "billPaid",
+        }
       },
     };
   },

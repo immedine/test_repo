@@ -1,7 +1,7 @@
 'use strict';
 
 ///////////////////////////////////////////////////
-// THIS IS THE ROUTE FILE FOR CATEGORY MODULE //
+// THIS IS THE ROUTE FILE FOR Requisition amount HISTORY MODULE //
 ///////////////////////////////////////////////////
 
 /**
@@ -36,35 +36,30 @@ module.exports = function (app, options) {
   const commonMiddlewares = require('../../common/middleware')(app);
 
   /**
-   * Adds a order
+   * Fetches a list of Requisition amount histories
    */
-  router.post('/generate-order-otp', [
-    // options.validateBody(schemaValidator.add),
-    controllers.generateOrderOtp
+  router.post('/list', [
+    options.validateQuery(schemaValidator.listQuery),
+    options.validateBody(schemaValidator.list),
+    controllers.list
+  ]);
+
+  router.post('/my-list', [
+    options.validateQuery(schemaValidator.listQuery),
+    options.validateBody(schemaValidator.list),
+    controllers.myList
   ]);
 
   /**
-   * Adds a order
+   * Fetches a Requisition amount history and edits a Requisition amount history
    */
-  router.post('/create', [
-    options.validateBody(schemaValidator.add),
-    controllers.add
-  ]);
-
-  /**
-   * Fetches a order, edits a order and removes a order
-   */
-  router.route('/:orderId')
+  router.route('/:requisitionAmountHistoryId')
     .all([
       options.validateParams(schemaValidator.param),
-      commonMiddlewares.validateId('Order', 'orderId')
+      commonMiddlewares.validateId('RequisitionAmountHistory', 'requisitionAmountHistoryId')
     ])
     .get([
       controllers.get
-    ])
-    .put([
-      options.validateBody(schemaValidator.edit),
-      controllers.edit
     ]);
 
 

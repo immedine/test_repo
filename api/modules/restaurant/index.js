@@ -77,11 +77,14 @@ module.exports = function (app) {
 
   const editMyRestaurant = (restaurantId, data) => {
     return Restaurant.findById(restaurantId)
-      .then(restaurant => {
+      .then(async restaurant => {
         if (!restaurant) {
           return Promise.reject({
             'errCode': 'RESTAURANT_NOT_FOUND'
           });
+        }
+        if (restaurant.logo && restaurant.logo !== data.logo) {
+          await app.utility.removeFile(restaurant.logo);
         }
         restaurant.set(data);
         return restaurant.save();

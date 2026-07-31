@@ -59,6 +59,7 @@ module.exports = function(app) {
     ImageByAI: db.model('ImageByAI', require('./models/imageByAI')(app, mongoose, plugins)),
     Order: db.model('Order', require('./models/order')(app, mongoose, plugins)),
     Inventory: db.model('Inventory', require('./models/inventory')(app, mongoose, plugins)),
+    InventoryHistory: db.model('InventoryHistory', require('./models/inventoryHistory')(app, mongoose, plugins)),
     Bill: db.model('Bill', require('./models/bill')(app, mongoose, plugins)),
     Table: db.model('Table', require('./models/table')(app, mongoose, plugins)),
     TableSession: db.model('TableSession', require('./models/tableSession')(app, mongoose, plugins)),
@@ -74,6 +75,8 @@ module.exports = function(app) {
     SalesHistory: db.model('SalesHistory', require('./models/salesHistory')(app, mongoose, plugins)),
     Batch: db.model('Batch', require('./models/batch')(app, mongoose, plugins)),
     KOT: db.model('KOT', require('./models/kot')(app, mongoose, plugins)),
+    RequisitionAmountHistory: db.model('RequisitionAmountHistory', require('./models/requisitionAmountHistory')(app, mongoose, plugins)),
+    TempOTP: db.model('TempOTP', require('./models/tempOtp')(app, mongoose, plugins)),
   };
 
   return db;

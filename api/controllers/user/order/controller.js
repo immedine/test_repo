@@ -51,6 +51,98 @@ module.exports = function (app) {
    * @type {Object}
    */
   const notification = app.module.notification;
+  const tempOTP = app.module.tempOTP;
+  const kot = app.module.kot;
+
+  const generateOrderOtp = async (req, res, next) => {
+    if (!req.body.extOrderId) {
+      let otpDetails;
+      if (req.body.otpId) {
+        otpDetails = await tempOTP.get({
+          _id: req.body.otpId,
+          restaurantRef: req.body.restaurantRef,
+        });
+        otpDetails.otp = app.utility.getRandomCodeNumber(4);
+        otpDetails.expiryTime = new Date(Date.now() + app.config.contentManagement.defaultOrderOTPExpiryTime);
+        await tempOTP.edit(otpDetails);
+      } else {
+        otpDetails = await tempOTP.create({
+          deviceId: req.headers['x-auth-deviceid'],
+          deviceType: req.headers['x-auth-devicetype'],
+          restaurantRef: req.body.restaurantRef,
+          tableRef: req.body.tableRef || null
+        });
+      }
+
+      let inAppNotification = app.config.notification.inApp(app, app.config.lang.defaultLanguage);
+      sse.broadcastOrderUpdate({
+        restaurantRef: req.body.restaurantRef,
+        type: "NEW_OTP_REQUEST",
+        message: inAppNotification.toRestaurantOwner.newOTPRequest.body(),
+      });
+      req.workflow.outcome.data = {
+        _id: otpDetails._id,
+        refNo: otpDetails.refNo
+      };
+      req.workflow.emit('response');
+    } else {
+      const otpData = await tempOTP.get({
+        deviceId: req.headers['x-auth-deviceid'],
+        deviceType: req.headers['x-auth-devicetype'],
+        restaurantRef: req.body.restaurantRef,
+        orderRef: req.body.extOrderId
+      });
+      if (!otpData) {
+        let otpDetails;
+        if (req.body.otpId) {
+          otpDetails = await tempOTP.get({
+            _id: req.body.otpId,
+            restaurantRef: req.body.restaurantRef,
+          });
+          otpDetails.otp = app.utility.getRandomCodeNumber(4);
+          otpDetails.expiryTime = new Date(Date.now() + app.config.contentManagement.defaultOrderOTPExpiryTime);
+          await tempOTP.edit(otpDetails);
+        } else {
+          otpDetails = await tempOTP.create({
+            deviceId: req.headers['x-auth-deviceid'],
+            deviceType: req.headers['x-auth-devicetype'],
+            restaurantRef: req.body.restaurantRef,
+            tableRef: req.body.tableRef || null
+          });
+        }
+        let inAppNotification = app.config.notification.inApp(app, app.config.lang.defaultLanguage);
+        sse.broadcastOrderUpdate({
+          restaurantRef: req.body.restaurantRef,
+          type: "NEW_OTP_REQUEST",
+          message: inAppNotification.toRestaurantOwner.newOTPRequest.body(),
+        });
+        req.workflow.outcome.data = {
+          _id: otpDetails._id,
+          refNo: otpDetails.refNo
+        };
+        req.workflow.emit('response');
+      } else {
+        otpData.otp = app.utility.getRandomCodeNumber(4);
+        otpData.expiryTime = new Date(Date.now() + app.config.contentManagement.defaultOrderOTPExpiryTime);
+
+        await tempOTP.edit(otpData);
+        let inAppNotification = app.config.notification.inApp(app, app.config.lang.defaultLanguage);
+        sse.broadcastOrderUpdate({
+          restaurantRef: req.body.restaurantRef,
+          type: "NEW_OTP_REQUEST",
+          message: inAppNotification.toRestaurantOwner.newOTPRequest.body(),
+        });
+        req.workflow.outcome.data = {
+          _id: otpData._id,
+          refNo: otpData.refNo
+        };
+        req.workflow.emit('response');
+      }
+
+
+    }
+
+  };
 
   /**
    * Adds a new order or updates an existing order
@@ -64,15 +156,51 @@ module.exports = function (app) {
    * @param  {Function} next Next is used to pass control to the next middleware function
    * @return {Promise}       The Promise
    */
-  const addOrder = (req, res, next) => {
-    // Check if this is an external order update (extOrderId present)
-    // If yes, redirect to updateById function
+  const addOrder = async (req, res, next) => {
+
+    const restDetails = await restaurant.get(req.body.restaurantRef);
+    let otpData = null;
+
     if (!req.body.extOrderId) {
+      if (!req.body.otp && restDetails?.config?.otpOrderEnabled) {
+        return next({ 'errCode': 'NO_ORDER_OTP' });
+      }
       let subTotal = 0;
       let total = 0;
 
-      // Step 1: Get or create an active table session for the user
-      // This links the order to a specific table if applicable
+      if (restDetails?.config?.otpOrderEnabled) {
+        const getQueryObj = {
+          otp: req.body.otp,
+          deviceId: req.headers['x-auth-deviceid'],
+          deviceType: req.headers['x-auth-devicetype'],
+          restaurantRef: req.body.restaurantRef,
+        };
+
+        if (req.body.tableRef) {
+          getQueryObj.tableRef = req.body.tableRef;
+        }
+
+        otpData = await tempOTP.get(getQueryObj);
+
+        if (!otpData) {
+          return next({ 'errCode': 'ORDER_OTP_MISMATCH' });
+        }
+        if (otpData.expiryTime < new Date()) {
+          req.workflow.outcome.data = {
+            error: 'ORDER_OTP_EXPIRED'
+          };
+          req.workflow.emit('response');
+
+          return;
+        }
+
+        otpData.otp = "";
+
+        req.body.otpDetails = [otpData._id];
+      }
+
+
+      // get active table session
       tableSession.createTableSessionFromUser(req.body)
         .then(output1 => {
 
@@ -99,9 +227,11 @@ module.exports = function (app) {
             status: app.config.contentManagement.order.pending
           })
             .then(async output => {
-              // Step 4: Get restaurant details to calculate taxes
-              // We need GST and service tax settings from the restaurant
-              const restDetails = await restaurant.get(req.body.restaurantRef);
+              if (restDetails?.config?.otpOrderEnabled && otpData) {
+                otpData.orderRef = output._id;
+
+                await tempOTP.edit(otpData);
+              }
 
               // Prepare bill creation request body
               const reqBody = {
@@ -159,7 +289,7 @@ module.exports = function (app) {
 
               // Step 8: Create the bill record
               bill.create(reqBody)
-                .then(output2 => {
+                .then(async output2 => {
 
                   // Step 9: Link bill to order
                   // Update the order with bill details reference
@@ -176,8 +306,23 @@ module.exports = function (app) {
                     tableSession.edit(output1);
                   }
 
-                  // Step 11: Send real-time notifications to restaurant staff
-                  // Get notification message template for the default language
+                  // // Create KOT with cart items
+                  const kotItems = output.cart.map(item => ({
+                    menuRef: item.menuRef,
+                    menuName: item.name,
+                    quantity: item.quantity,
+                    operation: 'add'
+                  }));
+
+                  await kot.create({
+                    orderRef: output._id,
+                    restaurantRef: req.body.restaurantRef,
+                    items: kotItems,
+                    createdByCustomer: true
+                  }).catch(err => {
+                    console.log('err creating KOT ', err);
+                  });
+
                   let inAppNotification = app.config.notification.inApp(app, app.config.lang.defaultLanguage);
 
                   // Broadcast order update via SSE (Server-Sent Events)
@@ -211,23 +356,68 @@ module.exports = function (app) {
 
   };
 
-  /**
-   * Updates an existing order by ID
-   * This function handles order modifications including:
-   * - Merging new cart items with existing cart
-   * - Recalculating totals (subtotal, GST, service charge)
-   * - Adding water charges and parcel charges if applicable
-   * - Updating the order and bill records
-   * @param  {Object}   req  Request object containing updated order data
-   * @param  {Object}   res  Response object
-   * @param  {Function} next Next is used to pass control to the next middleware function
-   */
-  const updateById = (req, res, next) => {
+  const updateById = async (req, res, next) => {
+    const restDetails = await restaurant.get(req.body.restaurantRef);
+    let otpData = null;
 
     // Step 1: Fetch the existing order data using the external order ID
     order.get(req.body.extOrderId)
       .then(async orderData => {
-        // Store old table reference in case we need to handle table changes
+        const oldOrderItems = [...orderData.cart];
+
+        if (orderData?.otpDetails?.length && restDetails?.config?.otpOrderEnabled) {
+          const existingDeviceIndex = orderData.otpDetails.findIndex(each => each.deviceId === req.headers['x-auth-deviceid'] &&
+            each.deviceType === req.headers['x-auth-devicetype']
+          );
+
+          if (existingDeviceIndex === -1 && req.body.tableRef && req.body.tableRef === orderData.tableRef.toString()) {
+
+            otpData = await tempOTP.get({
+              otp: req.body.otp,
+              deviceId: req.headers['x-auth-deviceid'],
+              deviceType: req.headers['x-auth-devicetype'],
+              restaurantRef: req.body.restaurantRef,
+              tableRef: req.body.tableRef
+            });
+
+            if (!otpData) {
+              req.workflow.outcome.data = {
+                error: 'ORDER_NOT_FOUND_WITH_DEVICE'
+              };
+              req.workflow.emit('response');
+
+              return;
+            }
+
+            if (otpData.expiryTime < new Date()) {
+              req.workflow.outcome.data = {
+                error: 'ORDER_OTP_EXPIRED'
+              };
+              req.workflow.emit('response');
+
+              return;
+            }
+
+            otpData.otp = "";
+            otpData.orderRef = orderData._id;
+            await tempOTP.edit(otpData);
+
+            orderData.otpDetails = orderData.otpDetails ? orderData.otpDetails.concat(otpData._id) : [otpData._id];
+
+            // req.workflow.outcome.data = {
+            //   error: 'ORDER_NOT_FOUND_WITH_DEVICE'
+            // };
+            // req.workflow.emit('response');
+          }
+        } else if (restDetails?.config?.otpOrderEnabled) {
+          req.workflow.outcome.data = {
+            error: 'ORDER_NOT_FOUND_WITH_DEVICE'
+          };
+          req.workflow.emit('response');
+
+          return;
+        }
+
         const oldTableId = orderData.tableRef;
 
         let subTotal = 0;
@@ -289,12 +479,11 @@ module.exports = function (app) {
 
         orderData.subTotal = subTotal;
         orderData.total = total;
-        orderData.status = app.config.contentManagement.order.pending;
+        orderData.status = app.config.contentManagement.order.orderUpdatedFromCustomer;
 
         order.edit(orderData)
           .then(async output => {
 
-            const restDetails = await restaurant.get(req.body.restaurantRef);
             let gstDetails = {};
             let serviceTaxDetails = {};
 
@@ -311,14 +500,14 @@ module.exports = function (app) {
               }
             });
 
-            console.log("orderData ", orderData)
+            // console.log("orderData ", orderData)
 
 
-            console.log("totalForNonGST ", totalForNonGST, " totalForNonServiceCharge ", totalForNonServiceCharge, " subTotal ", subTotal)
+            // console.log("totalForNonGST ", totalForNonGST, " totalForNonServiceCharge ", totalForNonServiceCharge, " subTotal ", subTotal)
 
             if (restDetails.gstDetails.gstEnabled) {
-              const cgst = Number((((subTotal + (orderData?.parcelDetails?.totalCost || 0)  - totalForNonGST) * (restDetails.gstDetails.cgst || 0)) / 100));
-              const sgst = Number((((subTotal + (orderData?.parcelDetails?.totalCost || 0)  - totalForNonGST) * (restDetails.gstDetails.sgst || 0)) / 100));
+              const cgst = Number((((subTotal + (orderData?.parcelDetails?.totalCost || 0) - totalForNonGST) * (restDetails.gstDetails.cgst || 0)) / 100));
+              const sgst = Number((((subTotal + (orderData?.parcelDetails?.totalCost || 0) - totalForNonGST) * (restDetails.gstDetails.sgst || 0)) / 100));
               gstDetails = {
                 cgst,
                 sgst,
@@ -328,7 +517,7 @@ module.exports = function (app) {
               total = Number((total + cgst + sgst).toFixed(2));
             }
             if (restDetails.serviceTaxDetails.serviceTaxEnabled) {
-              const serviceTax = Number((((subTotal + (orderData?.parcelDetails?.totalCost || 0)  - totalForNonServiceCharge) * (restDetails.serviceTaxDetails.serviceTax || 0)) / 100));
+              const serviceTax = Number((((subTotal + (orderData?.parcelDetails?.totalCost || 0) - totalForNonServiceCharge) * (restDetails.serviceTaxDetails.serviceTax || 0)) / 100));
               serviceTaxDetails = {
                 serviceTax,
                 serviceTaxInPercentage: restDetails.serviceTaxDetails.serviceTax
@@ -351,6 +540,76 @@ module.exports = function (app) {
 
             const finalOutput = output;
             finalOutput.billRef = billRes;
+
+            // Compare old order items with new cart items to find changes
+            const kotItems = [];
+            const newCart = req.body.cart || [];
+
+            // Check for new items and quantity increases
+            newCart.forEach(newItem => {
+              const oldItem = oldOrderItems.find(old =>
+                old._id && (newItem.menuRef && old._id.toString() === newItem.menuRef.toString() ||
+              newItem._id && old._id.toString() === newItem._id.toString())
+              );
+
+              if (!oldItem) {
+                // New item added - add full quantity
+                kotItems.push({
+                  menuRef: newItem.menuRef,
+                  menuName: newItem.name,
+                  quantity: newItem.quantity,
+                  operation: 'add'
+                });
+              } else if (oldItem && newItem.quantity > oldItem.quantity) {
+                // Quantity increased - add the difference only
+                const quantityDiff = newItem.quantity - oldItem.quantity;
+                kotItems.push({
+                  menuRef: newItem.menuRef,
+                  menuName: newItem.name,
+                  quantity: quantityDiff,
+                  operation: 'add'
+                });
+              }
+            });
+
+            // Check for removed items and quantity decreases
+            oldOrderItems.forEach(oldItem => {
+              const newItem = newCart.find(newItem =>
+                oldItem._id && (newItem.menuRef && oldItem._id.toString() === newItem.menuRef.toString() ||
+              newItem._id && oldItem._id.toString() === newItem._id.toString())
+              );
+
+              if (!newItem) {
+                // Item completely removed - remove full quantity
+                kotItems.push({
+                  menuRef: oldItem._id,
+                  menuName: oldItem.name,
+                  quantity: oldItem.quantity,
+                  operation: 'remove'
+                });
+              } else if (newItem && oldItem.quantity > newItem.quantity) {
+                // Quantity decreased - remove the difference only
+                const quantityDiff = oldItem.quantity - newItem.quantity;
+                kotItems.push({
+                  menuRef: oldItem._id,
+                  menuName: oldItem.name,
+                  quantity: quantityDiff,
+                  operation: 'remove'
+                });
+              }
+            });
+
+            // Create KOT if there are new or updated items
+            if (kotItems.length > 0) {
+              await kot.create({
+                orderRef: orderData._id,
+                restaurantRef: req.body.restaurantRef,
+                items: kotItems,
+                createdByCustomer: true
+              }).catch(err => {
+                console.log('err creating KOT ', err);
+              });
+            }
 
             req.workflow.outcome.data = finalOutput;
             req.workflow.emit('response');
@@ -413,7 +672,8 @@ module.exports = function (app) {
     add: addOrder,
     get: getOrder,
     edit: editOrder,
-    updateById: updateById
+    updateById: updateById,
+    generateOrderOtp: generateOrderOtp
   };
 
 };

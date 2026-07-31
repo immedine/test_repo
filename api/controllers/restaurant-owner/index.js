@@ -31,7 +31,8 @@ const controllers = {
   globalConfig: require('./global-config/route'),
   restaurant: require('./restaurant/route'),
   vendor: require('./vendor/route'),
-  restaurantMember: require('./restaurant-member/route'),  
+  restaurantMember: require('./restaurant-member/route'), 
+  requisitionAmountHistory: require('./requisition-amount-history/route'), 
 
   // /**
   //  * Admin User Route
@@ -170,6 +171,7 @@ module.exports = function(app) {
   privateRouter.use("/subscription", controllers.subscription(app, options));
   privateRouter.use("/requisition", controllers.requisition(app, options));
   privateRouter.use("/sales-history", controllers.salesHistory(app, options));
+  privateRouter.use("/adjustment", controllers.requisitionAmountHistory(app, options));
 
   // /**
   //  * Admin User Route

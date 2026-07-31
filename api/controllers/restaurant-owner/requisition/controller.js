@@ -21,6 +21,7 @@ module.exports = function (app) {
   const requisitionOrder = app.module.requisitionOrder;
   const restaurant = app.module.restaurant;
   const inventory = app.module.inventory;
+  const requisitionAmountHistory = app.module.requisitionAmountHistory;
 
   /**
    * Adds a requisition
@@ -60,8 +61,16 @@ module.exports = function (app) {
     }];
 
     requisition.create(req.body, req.session.user)
-      .then(output => {
-        restaurant.updateRestaurantRequisitionAmount(req.session.user.restaurantRef, req.body.total);
+      .then(async output => {
+        await restaurant.updateRestaurantRequisitionAmount(req.session.user.restaurantRef, req.body.total);
+        await requisitionAmountHistory.create({
+          restaurantRef: req.session.user.restaurantRef,
+          masterRestaurantRef: req.body.requestedToRestaurantRef,
+          amount: req.body.total,
+          isDebited: true,
+          historyType: app.config.contentManagement.requisitionPaymentHistoryType.requisitionCreated,
+          requisitionRef: output._id
+        });
         req.workflow.outcome.data = output;
         req.workflow.emit('response');
       })
@@ -280,10 +289,18 @@ module.exports = function (app) {
     }
 
     requisition.edit(req.requisitionId, req.session.user)
-      .then(output => {
+      .then(async output => {
         if (req.body.status === app.config.contentManagement.requisitionStatus.approved) {
           if (prevTotal !== req.body.total) {
             restaurant.updateRestaurantRequisitionAmount(req.requisitionId.requestedByRestaurantRef, prevTotal - req.body.total, true);
+            await requisitionAmountHistory.create({
+              restaurantRef: req.requisitionId.requestedByRestaurantRef,
+              masterRestaurantRef: req.requisitionId.requestedToRestaurantRef,
+              amount: prevTotal - req.body.total,
+              isDebited: false,
+              historyType: app.config.contentManagement.requisitionPaymentHistoryType.requisitionPartiallyApproved,
+              requisitionRef: req.requisitionId._id
+            });
           }
           inventory.updateInventoryCountForRequisition(req.requisitionId.cart, req.requisitionId._id, req.session.user)
             .then(() => {
@@ -293,6 +310,14 @@ module.exports = function (app) {
             .catch(next);
         } else {
           restaurant.updateRestaurantRequisitionAmount(req.requisitionId.requestedByRestaurantRef, req.requisitionId.total, true);
+          await requisitionAmountHistory.create({
+            restaurantRef: req.requisitionId.requestedByRestaurantRef,
+            masterRestaurantRef: req.requisitionId.requestedToRestaurantRef,
+            amount: req.requisitionId.total,
+            isDebited: false,
+            historyType: app.config.contentManagement.requisitionPaymentHistoryType.requisitionRejected,
+            requisitionRef: req.requisitionId._id
+          });
           req.workflow.outcome.data = output;
           req.workflow.emit('response');
         }
@@ -592,11 +617,13 @@ module.exports = function (app) {
       limit: Number(req.query.limit) || app.config.page.defaultLimit,
       filters: {
         requestedByRestaurantRef: req.session.user.restaurantRef,
-        status: {'$ne': app.config.contentManagement.requisitionOrderStatus.deletedDueToPopupClose},
-        paymentStatus: {'$nin': [
-          app.config.contentManagement.requisitionOrderPaymentStatus.created,
-          app.config.contentManagement.requisitionOrderPaymentStatus.paymentPending
-        ]}
+        status: { '$ne': app.config.contentManagement.requisitionOrderStatus.deletedDueToPopupClose },
+        paymentStatus: {
+          '$nin': [
+            app.config.contentManagement.requisitionOrderPaymentStatus.created,
+            app.config.contentManagement.requisitionOrderPaymentStatus.paymentPending
+          ]
+        }
       },
       sort: {
         createdAt: -1

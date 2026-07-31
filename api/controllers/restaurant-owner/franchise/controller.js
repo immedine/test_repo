@@ -11,6 +11,7 @@ module.exports = function (app) {
    */
   const restaurant = app.module.restaurant;
   const restaurantOwner = app.module.restaurantOwner;
+  const requisitionAmountHistory = app.module.requisitionAmountHistory;
 
   const addRestaurant = (req, res, next) => {
     req.body.createdBy = req.session.user._id;
@@ -19,7 +20,14 @@ module.exports = function (app) {
     req.body.deviceType = [app.config.user.deviceType.android];
     req.body.currentRequisitionMonthlyAmountLeft = req.body.maxRequisitionMonthlyAmount || 0;
     restaurant.create(req.body)
-      .then(output => {
+      .then(async output => {
+        await requisitionAmountHistory.create({
+          restaurantRef: output._id,
+          amount: req.body.maxRequisitionMonthlyAmount || 0,
+          masterRestaurantRef: req.session.user.restaurantRef,
+          isDebited: false,
+          historyType: app.config.contentManagement.requisitionPaymentHistoryType.franchiseCreate
+        });
         req.workflow.emit('response');
       })
       .catch(next);
@@ -32,9 +40,28 @@ module.exports = function (app) {
    * @return {Promise}       The Promise
    */
   const editRestaurant = (req, res, next) => {
+    const oldAmount = req.franchiseId.currentRequisitionMonthlyAmountLeft;
+    req.body.currentRequisitionMonthlyAmountLeft = req.body.maxRequisitionMonthlyAmount || req.franchiseId.currentRequisitionMonthlyAmountLeft;
+    let isDebited = false;
     restaurant
       .set(req.params.franchiseId, req.body)
-      .then((output) => {
+      .then(async (output) => {
+        let diff = 0;
+        if (oldAmount > output.currentRequisitionMonthlyAmountLeft) {
+          diff = oldAmount - output.currentRequisitionMonthlyAmountLeft;
+          isDebited = true;
+        } else if (oldAmount < output.currentRequisitionMonthlyAmountLeft) {
+          diff = output.currentRequisitionMonthlyAmountLeft - oldAmount;
+        }
+        if (diff > 0) {
+          await requisitionAmountHistory.create({
+            restaurantRef: output._id,
+            amount: diff,
+            masterRestaurantRef: req.session.user.restaurantRef,
+            isDebited: isDebited,
+            historyType: app.config.contentManagement.requisitionPaymentHistoryType.franchiseEdit
+          });
+        }
         req.workflow.outcome.data = output;
 
         req.workflow.emit('response');

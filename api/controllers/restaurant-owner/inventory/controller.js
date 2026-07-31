@@ -14,6 +14,7 @@ module.exports = function (app) {
    */
   const inventory = app.module.inventory;
   const menu = app.module.menu;
+  const InventoryHistory = app.models.InventoryHistory;
 
   /**
    * Adds a inventory
@@ -106,54 +107,84 @@ module.exports = function (app) {
 
   /**
    * Edits a inventory
-   * @param  {Object}   req  Request 
+   * @param  {Object}   req  Request
    * @param  {Object}   res  Response
    * @param  {Function} next Next is used to pass control to the next middleware function
    * @return {Promise}       The Promise
    */
-  const editInventory = (req, res, next) => {
-
+  const editInventory = async (req, res, next) => {
+    // Validate and prepare data before starting transaction
     if (req.body && Object.keys(req.body).length > 0) {
       for (let key in req.body) {
-        if (key !== "locationList" &&  req.body[key] !== undefined && req.body[key] !== null) {
+        if (key !== "locationList" && req.body[key] !== undefined && req.body[key] !== null) {
           req.inventoryId[key] = req.body[key];
         }
       }
     }
 
+    // Validate restaurant ownership (from original inventory.edit)
+    if (req.inventoryId.restaurantRef.toString() !== req.session.user.restaurantRef.toString()) {
+      return next({ errCode: 'INVENTORY_NOT_FOUND' });
+    }
+
+    const locationList = [];
+    const historyEntriesToCreate = [];
+
     if (req.body.locationList && req.body.locationList.length > 0) {
-      const locationList = [];
-      let history = [];
       req.body.locationList.forEach(location => {
-        const existingLocation = req.inventoryId.locationList.find(loc => loc._id.toString() === location._id);
-        if (existingLocation) {
-          history = existingLocation.history && existingLocation.history.length > 0 ? existingLocation.history : [];
+        // Extract history entries from request to create in InventoryHistory collection
+        if (location.history && location.history.length > 0) {
+          location.history.forEach(hist => {
+            historyEntriesToCreate.push({
+              restaurantRef: req.inventoryId.restaurantRef,
+              inventoryRef: req.inventoryId._id,
+              locationRef: location.location,
+              isDebited: hist.isDebited,
+              quantity: hist.quantity,
+              prevLocQuantity: hist.prevLocQuantity,
+              prevTotalQuantity: hist.prevTotalQuantity,
+              reason: hist.reason,
+              reOrderCount: hist.reOrderCount || 1,
+              orderRef: hist.orderRef,
+              requisitionRef: hist.requisitionRef,
+              expenseRef: hist.expenseRef,
+              userRef: hist.userRef || req.session.user._id,
+              userName: hist.userName || req.session.user.personalInfo?.fullName
+            });
+          });
         }
-        history = history.concat(location.history && location.history.length > 0 ? location.history : []);
-        location.history = history;
-        locationList.push({ ...location });
+
+        // Remove history from location before saving to inventory
+        const { history, ...locationWithoutHistory } = location;
+        locationList.push(locationWithoutHistory);
       });
+
       req.inventoryId.locationList = locationList;
     }
 
-    // req.inventoryId.name = req.body.name;
-    // req.inventoryId.quantity = req.body.quantity;
-    // req.inventoryId.unit = req.body.unit;
-    // req.inventoryId.preCode = req.body.preCode;
-    // req.inventoryId.code = req.body.code;
-    // req.inventoryId.saveAsUnit = req.body.saveAsUnit;
-    // req.inventoryId.image = req.body.image;
-    // req.inventoryId.locationList = req.body.locationList;
-    // req.inventoryId.categoryId = req.body.categoryId;
+    // Start transaction for atomic operations
+    const session = await app.db.startSession();
+    session.startTransaction();
 
-    // console.log("req.inventoryId ", req.inventoryId)
+    try {
+      // Create history entries in InventoryHistory collection within transaction
+      if (historyEntriesToCreate.length > 0) {
+        await InventoryHistory.insertMany(historyEntriesToCreate, { session });
+      }
 
-    inventory.edit(req.inventoryId, req.session.user)
-      .then(output => {
-        req.workflow.outcome.data = output;
-        req.workflow.emit('response');
-      })
-      .catch(next);
+      // Save inventory within transaction
+      await req.inventoryId.save({ session });
+
+      await session.commitTransaction();
+      session.endSession();
+
+      req.workflow.outcome.data = req.inventoryId;
+      req.workflow.emit('response');
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      return next(err);
+    }
   };
 
   /**
@@ -182,62 +213,8 @@ module.exports = function (app) {
   };
 
   const downloadReport = (req, res, next) => {
-    // let query = {
-    //   skip: Number(req.query.skip) || app.config.page.defaultSkip,
-    //   limit: Number(req.query.limit) || app.config.page.defaultLimit,
-    //   filters: {
-    //     status: app.config.contentManagement.inventory.active,
-    //     restaurantRef: req.session.user.restaurantRef
-    //   },
-    //   sort: {}
-    // };
 
     let { startDate, endDate } = req.body.filters;
-
-    // if (req.body.filters) {
-    //   let { startDate, endDate } = req.body.filters;
-    //   let andFilters = [{
-    //     restaurantRef: req.session.user.restaurantRef
-    //   }];
-
-    //   if (startDate && endDate) {
-    //     andFilters.push({
-    //       'locationList.history.date': {
-    //         $gte: new Date(startDate),
-    //         $lte: new Date(endDate)
-    //       }
-    //     });
-    //   } else if (startDate) {
-    //     andFilters.push({
-    //       'locationList.history.date': {
-    //         $gte: new Date(startDate)
-    //       }
-    //     });
-    //   } else if (endDate) {
-    //     andFilters.push({
-    //       'locationList.history.date': {
-    //         $lte: new Date(endDate)
-    //       }
-    //     });
-    //   }
-
-    //   if (andFilters.length > 0) {
-    //     query.filters = { $and: andFilters };
-    //   }
-
-    //   query.select = {
-    //     name: 1,
-    //     code: 1,
-    //     preCode: 1,
-    //     locationList: 1,
-    //     quantity: 1,
-    //     unit: 1,
-    //     saveAsUnit: 1,
-    //     updatedAt: 1,
-    //     categoryId: 1
-    //   };
-    // }
-
 
     inventory.downloadReport({
       startDate,

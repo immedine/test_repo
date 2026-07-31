@@ -29,16 +29,19 @@ module.exports = function(app) {
   const feedback = require('./feedback')(app);
   const vendor = require('./vendor')(app);
   const query = require('./query')(app);
+  const requisitionAmountHistory = require('./requisitionAmountHistory')(app);
   const batch = require('./batch')(app);
   const expense = require('./expense')(app);
   const kot = require('./kot')(app);
   const tableSession = require('./tableSession')(app);
+  const tempOTP = require('./tempOTP')(app);
   const imageByAI = require('./imageByAI')(app);
   const cron = require('./cron')(app)();
 
   return {
     init,
     query,
+    requisitionAmountHistory,
     globalConfig,
     session,
     vendor,
@@ -70,6 +73,7 @@ module.exports = function(app) {
     requisitionOrder,
     salesHistory,
     batch,
-    kot
+    kot,
+    tempOTP
   };
 };
