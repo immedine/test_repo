@@ -27,24 +27,24 @@ module.exports = function (app) {
    */
   const createRequisitionOrder = function (config, userRef) {
 
-    return RequisitionOrder.createRequisitionOrder(config)
-      .then(async requisitionOrder => {
-        const options = {
-          amount: config.total,
-          currency: "INR",
-          receipt: `REQUI_PAYMENT_${requisitionOrder._id}`,
-        };
+    return RequisitionOrder.createRequisitionOrder(config);
+      // .then(async requisitionOrder => {
+      //   const options = {
+      //     amount: config.total * 100,
+      //     currency: "INR",
+      //     receipt: `REQUI_PAYMENT_${requisitionOrder._id}`,
+      //   };
 
-        const order = await razorpay.orders.create(options);
-        console.log("Razorpay order created:", order);
-        requisitionOrder.razorpayOrderId = order.id;
-        requisitionOrder.receipt = options.receipt;
-        return requisitionOrder.save();
-      })
-      .catch(err => {
-        console.error("Error creating requisition order:", err);
-        throw err;
-      });
+      //   const order = await razorpay.orders.create(options);
+      //   console.log("Razorpay order created:", order);
+      //   requisitionOrder.razorpayOrderId = order.id;
+      //   requisitionOrder.receipt = options.receipt;
+      //   return requisitionOrder.save();
+      // })
+      // .catch(err => {
+      //   console.error("Error creating requisition order:", err);
+      //   throw err;
+      // });
   };
 
   /**
