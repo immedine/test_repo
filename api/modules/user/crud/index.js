@@ -99,13 +99,13 @@ module.exports = function (app) {
         "personalInfo.phone.number": phoneNumber,
       },
       {
+        $set: {
+          "personalInfo.fullName": fullName,
+        },
         $setOnInsert: {
-          personalInfo: {
-            phone: {
-              countryCode,
-              number: phoneNumber,
-            },
-            fullName
+          "personalInfo.phone": {
+            countryCode,
+            number: phoneNumber,
           },
         },
       },
