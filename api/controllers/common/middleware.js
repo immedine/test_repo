@@ -9,7 +9,7 @@ module.exports = function (app) {
    */
   const checkSession = function (userType) {
     return function (req, res, next) {
-      console.log('req.token', req.token);
+      // console.log('req.token', req.token);
       app.module.session
         .get(
           req.token,

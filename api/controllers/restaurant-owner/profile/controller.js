@@ -88,7 +88,7 @@ module.exports = function (app) {
   };
 
   const changeRestaurant = (req, res, next) => {
-    console.log("change restaurant req.body", req.headers, req.session.user);
+    // console.log("change restaurant req.body", req.headers, req.session.user);
     // req.workflow.emit('response');
     restaurantOwner.auth
       .changeRestaurant(

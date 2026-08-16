@@ -30,7 +30,7 @@ module.exports = function (app) {
 
       const signature = req.headers["x-razorpay-signature"];
 
-      console.log("🔐 Verifying webhook with signature:", signature);
+      // console.log("🔐 Verifying webhook with signature:", signature);
 
       // 🔐 Verify signature
       const expectedSignature = crypto
@@ -38,7 +38,7 @@ module.exports = function (app) {
         .update(req.body)
         .digest("hex");
 
-      console.log("🔐 Expected signature:", expectedSignature);
+      // console.log("🔐 Expected signature:", expectedSignature);
 
       if (signature !== expectedSignature) {
         console.log("❌ Invalid signature");
@@ -48,14 +48,14 @@ module.exports = function (app) {
       // ✅ Parse body AFTER verification
       const event = JSON.parse(req.body.toString());
 
-      console.log("✅ Webhook received:", event.event);
+      // console.log("✅ Webhook received:", event.event);
 
       // 🎯 Handle events
       switch (event.event) {
         case "payment.authorized": {
           const payment = event.payload.payment.entity;
 
-          console.log("💰 Payment Success:", payment);
+          // console.log("💰 Payment Success:", payment);
 
           // 👉 Update DB
           if (payment.description === "SUBSCRIPTION") {
@@ -120,7 +120,7 @@ module.exports = function (app) {
         case "payment.captured": {
           const payment = event.payload.payment.entity;
 
-          console.log("💰 Payment Success:", payment);
+          // console.log("💰 Payment Success:", payment);
 
           // 👉 Update DB
           if (payment.description === "SUBSCRIPTION") {
@@ -205,7 +205,7 @@ module.exports = function (app) {
         }
 
         default:
-          console.log("Unhandled event:", event.event);
+          // console.log("Unhandled event:", event.event);
       }
 
       res.status(200).json({ status: "ok" });
@@ -226,7 +226,7 @@ module.exports = function (app) {
   let handleWebhook = function (req, res, next) {
 
     if (!knownEvents[req.stripeEvent.type]) {
-      console.log(req.stripeEvent.type + ': Not found in our event list');
+      // console.log(req.stripeEvent.type + ': Not found in our event list');
       return res.status(200).end();
     }
     if (req.stripeEvent && req.stripeEvent.type) {
@@ -249,7 +249,7 @@ module.exports = function (app) {
   let handleBraintreeWebhook = function (req, res, next) {
     app.utility.braintree.webhookValidation(req.body.bt_signature, req.body.bt_payload, function (err, webhookNotification) {
       if (!knownEvents[webhookNotification.kind]) {
-        console.log(webhookNotification.kind + ': Not found in our event list');
+        // console.log(webhookNotification.kind + ': Not found in our event list');
         return res.status(200).end();
       }
       if (webhookNotification.kind) {

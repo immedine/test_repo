@@ -47,12 +47,8 @@ module.exports = function (app, mongoose) {
           enum: ['add', 'remove', 'update'],
           default: 'add'
         },
-      }],
-    }],
-    createdByCustomer: {
-      type: Boolean,
-      default: false
-    }
+      }]
+    }]
   }, {
     versionKey: false,
     timestamps: true

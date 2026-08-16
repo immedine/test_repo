@@ -71,7 +71,7 @@ const bulkUpload = async (app) => {
 module.exports = function (app) {
   // cron will run every 1 hour, for testing make 0 as * for minute
   cron.schedule('* * * * *', () => {
-    console.log('cron will run every minute');
+    // console.log('cron will run every minute');
     bulkUpload(app);
   });
 };

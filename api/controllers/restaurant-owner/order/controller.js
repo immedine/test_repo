@@ -168,7 +168,6 @@ module.exports = function (app) {
   const menu = app.module.menu;
   const user = app.module.user;
   const kot = app.module.kot;
-  const tempOTP = app.module.tempOTP;
 
   /**
    * Adds a order
@@ -779,7 +778,7 @@ module.exports = function (app) {
         query.filters = { $and: andFilters };
       }
 
-      console.log("andFilters ", andFilters)
+      // console.log("andFilters ", andFilters)
 
       query.select = {
         tableId: 1,
@@ -897,7 +896,6 @@ module.exports = function (app) {
             app.config.contentManagement.order.cooking,
             app.config.contentManagement.order.served,
             app.config.contentManagement.order.pending,
-            app.config.contentManagement.order.orderUpdatedFromCustomer,
           ]
         }
       }];
@@ -1398,59 +1396,6 @@ module.exports = function (app) {
       .catch(next);
   };
 
-  const getOrderOtpList = (req, res, next) => {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
-    let query = {
-      skip: Number(req.query.skip) || app.config.page.defaultSkip,
-      limit: Number(req.query.limit) || app.config.page.defaultLimit,
-      filters: {
-        createdAt: {
-          $gte: startOfDay,
-          $lte: endOfDay
-        },
-        restaurantRef: req.session.user.restaurantRef,
-        otp: {
-          $exists: true,
-          $ne: ""
-        },
-        attempt: {
-          $lte: 3
-        },
-      },
-      sort: {
-        updatedAt: -1
-      },
-      populate: [{
-        path: 'orderRef',
-        select: '_id orderId'
-      }, {
-        path: 'tableRef',
-        select: '_id tableId'
-      }]
-    };
-
-    tempOTP.list(query)
-      .then(output => {
-        req.workflow.outcome.data = output;
-        req.workflow.emit('response');
-      })
-      .catch(next);
-  };
-
-  const markAsDone = (req, res, next) => {
-    req.otpId.otp = "";
-
-    tempOTP.edit(req.otpId)
-      .then(data => {
-        req.workflow.emit('response');
-      }).catch(next);
-
-  };
-
   return {
     add: addOrder,
     get: getOrder,
@@ -1466,9 +1411,7 @@ module.exports = function (app) {
     getOngoingOrderList: getOngoingOrderList,
     updateCartByIdbId: updateCartByIdbId,
     updateNote: updateNote,
-    getKotsByOrderId: getKotsByOrderId,
-    getOrderOtpList: getOrderOtpList,
-    markAsDone: markAsDone
+    getKotsByOrderId: getKotsByOrderId
   };
 
 };

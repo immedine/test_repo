@@ -254,6 +254,9 @@ module.exports = function (app) {
         }
       })
       .then((output) => {
+        if (!output) {
+          return Promise.resolve();
+        }
         if (!output.userDoc.isFranchise) {
           return Promise.resolve(output);
         } else {
@@ -274,16 +277,22 @@ module.exports = function (app) {
           }
         }
       })
-      .then((output) =>
-        app.module.session.set(
+      .then((output) => {
+        if (!output) {
+          return Promise.resolve();
+        }
+        return app.module.session.set(
           output.userType,
           output.userDoc,
           req.headers['x-auth-devicetype'],
           req.headers['x-auth-deviceid'],
           req.headers['x-auth-notificationkey']
         )
-      )
+      })
       .then((output) => {
+        if (!output) {
+          return Promise.resolve();
+        }
         req.workflow.outcome.data = {
           accessToken: output.accessToken,
           refreshToken: output.refreshToken,
@@ -496,7 +505,7 @@ module.exports = function (app) {
 
   async function verifyGoogleToken(idToken) {
     try {
-      console.log('Verifying Google token:', idToken);
+      // console.log('Verifying Google token:', idToken);
       const ticket = await client.verifyIdToken({
         idToken: idToken,
         audience: process.env.GOOGLE_CLIENT_ID, // must match
@@ -504,7 +513,7 @@ module.exports = function (app) {
 
       const payload = ticket.getPayload();
 
-      console.log('Google token verified successfully. Payload:', payload);
+      // console.log('Google token verified successfully. Payload:', payload);
 
       return {
         valid: true,
@@ -568,16 +577,22 @@ module.exports = function (app) {
           }
         }
       })
-      .then((output) =>
-        app.module.session.set(
+      .then((output) =>{
+        if (!output) {
+          return Promise.resolve();
+        }
+        return app.module.session.set(
           output.userType,
           output.userDoc,
           req.headers['x-auth-devicetype'],
           req.headers['x-auth-deviceid'],
           req.headers['x-auth-notificationkey']
         )
-      )
+      })
       .then((output) => {
+        if (!output) {
+          return Promise.resolve();
+        }
         req.workflow.outcome.data = {
           accessToken: output.accessToken,
           refreshToken: output.refreshToken,

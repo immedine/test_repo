@@ -95,14 +95,6 @@ module.exports = function (app, mongoose) {
         type: Boolean,
         default: true
       },
-      qrOrderEnabled: {
-        type: Boolean,
-        default: false
-      },
-      otpOrderEnabled: {
-        type: Boolean,
-        default: false
-      },
       orderEnabled: {
         type: Boolean,
         default: false

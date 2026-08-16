@@ -22,7 +22,7 @@ function cleanAndTag(str) {
 }
 
 const bulkUpload = async (app) => {
-  console.log('bulk upload cron job started');
+  // console.log('bulk upload cron job started');
   const Category = app.models.Category;
   const Menu = app.models.Menu;
   const ImageByAI = app.models.ImageByAI;
@@ -99,7 +99,7 @@ const bulkUpload = async (app) => {
         }
       }
     }
-    console.log("completed ");
+    // console.log("completed ");
 
 
     // if (files && files.length) {
@@ -219,7 +219,7 @@ const bulkUpload = async (app) => {
 module.exports = function (app) {
   // cron will run every 1 hour, for testing make 0 as * for minute
   cron.schedule('* * * * *', () => {
-    console.log('cron will run every minute');
+    // console.log('cron will run every minute');
     bulkUpload(app);
   });
 };

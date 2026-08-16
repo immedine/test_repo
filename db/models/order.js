@@ -134,11 +134,7 @@ module.exports = function (app, mongoose) {
         type: Number,
         default: 0
       }
-    },
-    otpDetails: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'TempOTP'
-    }]
+    }
   }, {
     versionKey: false,
     timestamps: true,

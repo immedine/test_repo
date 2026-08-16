@@ -150,9 +150,6 @@ module.exports = function (app) {
       .populate({
         path: 'billRef'
       })
-      .populate({
-        path: 'otpDetails'
-      })
       .then(orderDetails => {
         if (!orderDetails || (orderDetails && userRef &&
           orderDetails.restaurantRef.toString() !== userRef.restaurantRef.toString())) {

@@ -85,7 +85,7 @@ module.exports = function (app) {
 
   const triggerEmail = function (req, res, next) {
 
-    console.log("req.body ", req.body)
+    // console.log("req.body ", req.body)
     let val = req.body;
     if (!req.body.noReturn) {
       req.workflow.outcome.data = val;
@@ -134,8 +134,8 @@ module.exports = function (app) {
 
         // Send the email
         const info = await transporter.sendMail(mailOptions);
-        console.log('Email sent successfully.');
-        console.log('Info object:', info);
+        // console.log('Email sent successfully.');
+        // console.log('Info object:', info);
 
         // Append the sent email to the "Sent" folder using IMAP
         const imap = new Imap({
@@ -162,7 +162,7 @@ module.exports = function (app) {
               if (appendErr) {
                 console.error('Error appending email to "Sent" folder:', appendErr);
               } else {
-                console.log('Email appended to "Sent" folder.');
+                // console.log('Email appended to "Sent" folder.');
               }
               imap.end();
             });

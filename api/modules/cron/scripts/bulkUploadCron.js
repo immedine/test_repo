@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 
 const bulkUpload = async (app) => {
-  console.log('bulk upload cron job started');
+  // console.log('bulk upload cron job started');
   const Category = app.models.Category;
   const Menu = app.models.Menu;
   // const uploadDir = path.join(__dirname, 'public', 'uploads');
@@ -53,7 +53,7 @@ const bulkUpload = async (app) => {
                 return acc;
               }, {});
 
-              console.log("groupedMenu ", groupedMenu)
+              // console.log("groupedMenu ", groupedMenu)
 
               if (Object.keys(groupedMenu).length) {
                 for (const categoryName in groupedMenu) {
@@ -89,7 +89,7 @@ const bulkUpload = async (app) => {
 
                 }
               }
-              console.log("completed ");
+              // console.log("completed ");
 
               // console.log('rows found in excel file', rows);
               // console.log('data found in excel file', data);
@@ -125,7 +125,7 @@ const bulkUpload = async (app) => {
 module.exports = function (app) {
   // cron will run every 1 hour, for testing make 0 as * for minute
   cron.schedule('* * * * *', () => {
-    console.log('cron will run every minute');
+    // console.log('cron will run every minute');
     bulkUpload(app);
   });
 };

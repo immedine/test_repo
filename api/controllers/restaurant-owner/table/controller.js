@@ -112,7 +112,7 @@ module.exports = function (app) {
     }
     table.edit(req.tableId, req.session.user)
       .then(async output => {
-        console.log("req.body ", req.body)
+        // console.log("req.body ", req.body)
         if (req.body.status === app.config.contentManagement.table.active &&
           oldStatus !== req.body.status
         ) {
