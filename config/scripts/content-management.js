@@ -57,7 +57,8 @@ module.exports = {
     served: 3,
     completed: 4,
     deleted: 5, // need to be changed -> cancelled
-    pending: 6
+    pending: 6,
+    orderUpdatedFromCustomer: 7
   },
   orderType: {
     inStore: 1,
@@ -209,5 +210,6 @@ module.exports = {
     requisitionPartiallyApproved: 3,
     requisitionCreated: 4,
     franchiseEdit: 5
-  }
+  },
+  defaultOrderOTPExpiryTime: 10 * 60 * 1000
 };

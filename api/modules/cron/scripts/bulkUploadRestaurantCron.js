@@ -64,7 +64,7 @@ const bulkUpload = async (app) => {
       }
     }
   } else {
-    console.warn(`Upload directory not found: ${uploadDir}`);
+    // console.warn(`Upload directory not found: ${uploadDir}`);
   }
 };
 

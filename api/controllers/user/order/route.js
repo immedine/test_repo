@@ -38,6 +38,14 @@ module.exports = function (app, options) {
   /**
    * Adds a order
    */
+  router.post('/generate-order-otp', [
+    // options.validateBody(schemaValidator.add),
+    controllers.generateOrderOtp
+  ]);
+
+  /**
+   * Adds a order
+   */
   router.post('/create', [
     options.validateBody(schemaValidator.add),
     controllers.add

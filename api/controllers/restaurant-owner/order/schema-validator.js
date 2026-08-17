@@ -89,6 +89,16 @@ module.exports = function(app) {
     }
   };
 
+  const otpParam = {
+    'otpId': {
+      type: 'string',
+      required: true,
+      'conform': function(value) {
+        return app.utility.checkMongooseObjectId(value);
+      }
+    }
+  };
+
   const list = {
     'sortConfig': {
       type: 'object',
@@ -117,7 +127,8 @@ module.exports = function(app) {
     param: param,
     list: list,
     changeStatus: changeStatus,
-    updateNote: updateNote
+    updateNote: updateNote,
+    otpParam: otpParam
   };
 
 };

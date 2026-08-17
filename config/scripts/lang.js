@@ -24,7 +24,10 @@ module.exports = {
         },
         acceptOrder: {
           body: (id, staffName) => `Order #${id} status updated by ${staffName}!`,
-        }
+        },
+        newOTPRequest: {
+          body: () => `New OTP request arrived!`,
+        },
       },
     },
 

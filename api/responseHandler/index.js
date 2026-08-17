@@ -210,7 +210,7 @@ module.exports = function (app) {
           response.errorCode = 403;
         }
       }
-      console.log("req ", req.headers)
+      // console.log("req ", req.headers)
       if (!response.errorCode) {
         console.log("trigger mail")
       }
