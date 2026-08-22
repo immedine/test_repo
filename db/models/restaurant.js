@@ -103,6 +103,14 @@ module.exports = function (app, mongoose) {
         type: Boolean,
         default: false
       },
+      enableQrPayment: {
+        type: Boolean,
+        default: false
+      },
+      upiId: {
+        type: String,
+        default: ''
+      },
       otpOrderEnabled: {
         type: Boolean,
         default: false
