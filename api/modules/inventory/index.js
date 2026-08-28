@@ -843,7 +843,7 @@ module.exports = function (app) {
   }
 
 
-  async function rollbackInventory(orderId, updatedItems, onlyRemove, reOrderCount, userData) {
+  async function rollbackInventoryxx(orderId, updatedItems, onlyRemove, reOrderCount, userData) {
     const session = await app.db.startSession();
 
     try {
@@ -1227,6 +1227,532 @@ module.exports = function (app) {
 
       await session.endSession();
 
+    }
+  }
+
+  async function rollbackInventory(
+    orderId,
+    updatedItems = [],
+    onlyRemove,
+    reOrderCount,
+    userData
+  ) {
+    const session = await app.db.startSession();
+
+    try {
+      session.startTransaction();
+
+      // =====================================================
+      // STEP 1: Fetch existing order
+      // =====================================================
+
+      const existingOrder = await Order.findById(orderId)
+        .populate({
+          path: "cart.menuRef",
+          populate: {
+            path: "ingredients.inventoryRef"
+          }
+        })
+        .session(session)
+        .lean();
+
+      if (!existingOrder) {
+        throw {
+          errCode: "ORDER_NOT_FOUND"
+        };
+      }
+
+      // Ensure updatedItems is always an array
+      const items = Array.isArray(updatedItems) ? updatedItems : [];
+
+      // =====================================================
+      // STEP 2: Restore inventory from previous order
+      // =====================================================
+
+      const restoreUsage = {};
+      const restoreUsageLoc = {};
+      const restorePrevQuantity = {};
+      const restoreUsageMenuRef = {};
+
+      const existingCart = Array.isArray(existingOrder.cart)
+        ? existingOrder.cart
+        : [];
+
+      for (const item of existingCart) {
+        if (!item || !item.menuRef) {
+          continue;
+        }
+
+        const updatedItem = items.find(
+          u =>
+            u &&
+            u._id &&
+            item._id &&
+            u._id.toString() === item._id.toString()
+        );
+
+        const shouldRestore =
+          onlyRemove ||
+          (
+            !onlyRemove &&
+            (
+              (item._id && !updatedItem) ||
+              (updatedItem && updatedItem.updated)
+            )
+          );
+
+        if (!shouldRestore) {
+          continue;
+        }
+
+        const ingredients = item.menuRef.ingredients || [];
+
+        for (const ing of ingredients) {
+          if (!ing || !ing.inventoryRef || !ing.location) {
+            continue;
+          }
+
+          const inventoryId = ing.inventoryRef._id.toString();
+          const locationId = ing.location.toString();
+
+          const qty = Number(ing.quantity || 0) * Number(item.quantity || 0);
+
+          if (!qty) {
+            continue;
+          }
+
+          if (!restoreUsage[inventoryId]) {
+            restoreUsage[inventoryId] = 0;
+
+            restoreUsageMenuRef[inventoryId] =
+              item.menuRef._id || item.menuRef;
+          }
+
+          restoreUsage[inventoryId] += qty;
+
+          restoreUsageLoc[inventoryId] = locationId;
+
+          const locationData =
+            ing.inventoryRef.locationList?.find(
+              loc =>
+                loc.location &&
+                loc.location.toString() === locationId
+            );
+
+          restorePrevQuantity[inventoryId] = {
+            prevLocQuantity: locationData?.quantity || 0,
+            prevTotalQuantity: ing.inventoryRef.quantity || 0
+          };
+        }
+      }
+
+      // =====================================================
+      // STEP 2A: Restore inventory
+      // =====================================================
+
+      const restoreInventoryIds = Object.keys(restoreUsage);
+
+      if (restoreInventoryIds.length > 0) {
+
+        const restoreOps = restoreInventoryIds.map(invId => ({
+          updateOne: {
+            filter: {
+              _id: new mongoose.Types.ObjectId(invId)
+            },
+            update: {
+              $inc: {
+                "locationList.$[loc].quantity":
+                  restoreUsage[invId],
+                quantity:
+                  restoreUsage[invId]
+              }
+            },
+            arrayFilters: [
+              {
+                "loc.location":
+                  new mongoose.Types.ObjectId(
+                    restoreUsageLoc[invId]
+                  )
+              }
+            ]
+          }
+        }));
+
+        await Inventory.bulkWrite(
+          restoreOps,
+          {
+            session,
+            ordered: false
+          }
+        );
+
+        // ===================================================
+        // Fetch updated inventory documents ONCE
+        // ===================================================
+
+        const inventories = await Inventory.find({
+          _id: {
+            $in: restoreInventoryIds.map(
+              id => new mongoose.Types.ObjectId(id)
+            )
+          }
+        })
+          .session(session)
+          .lean();
+
+        const inventoryMap = new Map(
+          inventories.map(inv => [
+            inv._id.toString(),
+            inv
+          ])
+        );
+
+        const historyDocs = [];
+
+        for (const invId of restoreInventoryIds) {
+          const inventory = inventoryMap.get(invId);
+
+          if (!inventory) {
+            continue;
+          }
+
+          const historyData = {
+            restaurantRef: inventory.restaurantRef,
+            inventoryRef: inventory._id,
+            locationRef: new mongoose.Types.ObjectId(
+              restoreUsageLoc[invId]
+            ),
+            orderRef: orderId,
+            quantity: restoreUsage[invId],
+            isDebited: false,
+            reason: "ORDER_UPDATE",
+            prevLocQuantity:
+              restorePrevQuantity[invId]?.prevLocQuantity || 0,
+            prevTotalQuantity:
+              restorePrevQuantity[invId]?.prevTotalQuantity || 0,
+            userRef: userData._id,
+            userName:
+              userData.personalInfo?.fullName,
+            menuRef: restoreUsageMenuRef[invId]
+          };
+
+          if (!onlyRemove) {
+            historyData.reOrderCount = reOrderCount;
+          }
+
+          historyDocs.push(historyData);
+        }
+
+        if (historyDocs.length > 0) {
+          await InventoryHistory.insertMany(
+            historyDocs,
+            {
+              session,
+              ordered: false
+            }
+          );
+        }
+      }
+
+      // =====================================================
+      // STEP 3: Deduct inventory for updated/new items
+      // =====================================================
+
+      if (!onlyRemove && items.length > 0) {
+
+        // ---------------------------------------------------
+        // Get only updated/new items
+        // ---------------------------------------------------
+
+        const inventoryItems = items.filter(
+          item =>
+            item &&
+            item.menuRef &&
+            (item.updated || !item._id)
+        );
+
+        if (inventoryItems.length > 0) {
+
+          // =================================================
+          // IMPORTANT OPTIMIZATION
+          // Fetch ALL menus in ONE query
+          // =================================================
+
+          const menuIds = [
+            ...new Set(
+              inventoryItems.map(
+                item => item.menuRef.toString()
+              )
+            )
+          ];
+
+          const menus = await Menu.find({
+            _id: {
+              $in: menuIds.map(
+                id => new mongoose.Types.ObjectId(id)
+              )
+            }
+          })
+            .populate("ingredients.inventoryRef")
+            .session(session)
+            .lean();
+
+          const menuMap = new Map(
+            menus.map(menu => [
+              menu._id.toString(),
+              menu
+            ])
+          );
+
+          // =================================================
+          // Calculate new ingredient usage
+          // =================================================
+
+          const newIngredientUsage = {};
+          const newIngredientLoc = {};
+          const newPrevQuantity = {};
+          const newIngredientMenuRef = {};
+
+          for (const item of inventoryItems) {
+
+            const menuId = item.menuRef.toString();
+
+            const menu = menuMap.get(menuId);
+
+            if (!menu) {
+              throw {
+                errCode: "MENU_NOT_FOUND"
+              };
+            }
+
+            const ingredients = menu.ingredients || [];
+
+            for (const ing of ingredients) {
+
+              if (!ing || !ing.inventoryRef || !ing.location) {
+                continue;
+              }
+
+              const inventoryId =
+                ing.inventoryRef._id.toString();
+
+              const locationId =
+                ing.location.toString();
+
+              const qty =
+                Number(ing.quantity || 0) *
+                Number(item.quantity || 0);
+
+              if (!qty) {
+                continue;
+              }
+
+              if (!newIngredientUsage[inventoryId]) {
+                newIngredientUsage[inventoryId] = 0;
+
+                newIngredientMenuRef[inventoryId] =
+                  item.menuRef;
+              }
+
+              newIngredientUsage[inventoryId] += qty;
+
+              newIngredientLoc[inventoryId] =
+                locationId;
+
+              const locationData =
+                ing.inventoryRef.locationList?.find(
+                  loc =>
+                    loc.location &&
+                    loc.location.toString() ===
+                    locationId
+                );
+
+              newPrevQuantity[inventoryId] = {
+                prevLocQuantity:
+                  locationData?.quantity || 0,
+
+                prevTotalQuantity:
+                  ing.inventoryRef.quantity || 0
+              };
+            }
+          }
+
+          // =================================================
+          // STEP 3A: Deduct inventory
+          // =================================================
+
+          const deductInventoryIds =
+            Object.keys(newIngredientUsage);
+
+          if (deductInventoryIds.length > 0) {
+
+            const deductOps =
+              deductInventoryIds.map(invId => ({
+                updateOne: {
+                  filter: {
+                    _id: new mongoose.Types.ObjectId(invId)
+                  },
+                  update: {
+                    $inc: {
+                      "locationList.$[loc].quantity":
+                        -newIngredientUsage[invId],
+
+                      quantity:
+                        -newIngredientUsage[invId]
+                    }
+                  },
+                  arrayFilters: [
+                    {
+                      "loc.location":
+                        new mongoose.Types.ObjectId(
+                          newIngredientLoc[invId]
+                        )
+                    }
+                  ]
+                }
+              }));
+
+            await Inventory.bulkWrite(
+              deductOps,
+              {
+                session,
+                ordered: false
+              }
+            );
+
+            // ===============================================
+            // Fetch inventories ONCE
+            // ===============================================
+
+            const inventories =
+              await Inventory.find({
+                _id: {
+                  $in: deductInventoryIds.map(
+                    id =>
+                      new mongoose.Types.ObjectId(id)
+                  )
+                }
+              })
+                .session(session)
+                .lean();
+
+            const inventoryMap = new Map(
+              inventories.map(inv => [
+                inv._id.toString(),
+                inv
+              ])
+            );
+
+            const historyDocs = [];
+
+            for (const invId of deductInventoryIds) {
+
+              const inventory =
+                inventoryMap.get(invId);
+
+              if (!inventory) {
+                continue;
+              }
+
+              historyDocs.push({
+                restaurantRef:
+                  inventory.restaurantRef,
+
+                inventoryRef:
+                  inventory._id,
+
+                locationRef:
+                  new mongoose.Types.ObjectId(
+                    newIngredientLoc[invId]
+                  ),
+
+                orderRef:
+                  orderId,
+
+                quantity:
+                  newIngredientUsage[invId],
+
+                isDebited: true,
+
+                reason:
+                  "ORDER_UPDATE",
+
+                prevLocQuantity:
+                  newPrevQuantity[invId]
+                    ?.prevLocQuantity || 0,
+
+                prevTotalQuantity:
+                  newPrevQuantity[invId]
+                    ?.prevTotalQuantity || 0,
+
+                userRef:
+                  userData._id,
+
+                userName:
+                  userData.personalInfo?.fullName,
+
+                reOrderCount,
+
+                menuRef:
+                  newIngredientMenuRef[invId]
+              });
+            }
+
+            if (historyDocs.length > 0) {
+
+              await InventoryHistory.insertMany(
+                historyDocs,
+                {
+                  session,
+                  ordered: false
+                }
+              );
+            }
+          }
+        }
+      }
+
+      // =====================================================
+      // STEP 4: Commit transaction
+      // =====================================================
+
+      await session.commitTransaction();
+
+      return {
+        success: true,
+        message: "Order updated and inventory adjusted"
+      };
+
+    } catch (err) {
+
+      try {
+        if (session.inTransaction()) {
+          await session.abortTransaction();
+        }
+      } catch (abortErr) {
+        console.error(
+          "rollbackInventory abort error:",
+          abortErr
+        );
+      }
+
+      console.error(
+        "rollbackInventory error:",
+        err
+      );
+
+      if (err?.errCode) {
+        throw err;
+      }
+
+      throw {
+        success: false,
+        error: err?.message || err
+      };
+
+    } finally {
+
+      await session.endSession();
     }
   }
 

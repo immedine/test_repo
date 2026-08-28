@@ -7,7 +7,9 @@ module.exports = function (app, mongoose) {
     },
     idbId: {
       type: String,
-      required: true
+      required: true,
+      index: true,
+      unique: true
     },
     note: {
       type: String
