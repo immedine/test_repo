@@ -69,6 +69,12 @@ module.exports = function (app, options) {
     controllers.getOngoingOrderList
   ]);
 
+  router.post('/ongoing-list-v2', [
+    options.validateQuery(schemaValidator.listQuery),
+    options.validateBody(schemaValidator.list),
+    controllers.getOngoingOrderListV2
+  ]);
+
   router.put('/mark-done/:otpId', [
     options.validateParams(schemaValidator.otpParam),
     commonMiddlewares.validateId('TempOTP', 'otpId'),

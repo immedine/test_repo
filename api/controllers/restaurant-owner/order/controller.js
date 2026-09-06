@@ -1000,6 +1000,162 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const getOngoingOrderListV2 = (req, res, next) => {
+
+    let query = {
+      skip: Number(req.query.skip) || app.config.page.defaultSkip,
+      limit: Number(req.query.limit) || app.config.page.defaultLimit,
+      filters: {},
+      sort: {
+        createdAt: -1
+      }
+    };
+
+    const idbOrderFilters = [{
+      restaurantRef: req.session.user.restaurantRef,
+      status: {
+        '$in': [
+          app.config.contentManagement.order.completed,
+          app.config.contentManagement.order.deleted,
+        ]
+      },
+      idbId: {
+        '$in': req.body.orderList
+      }
+    }];
+
+    const idbQuery = {
+      skip: Number(req.query.skip) || app.config.page.defaultSkip,
+      limit: Number(req.query.limit) || app.config.page.defaultLimit,
+      filters: { $and: idbOrderFilters },
+      sort: {
+        createdAt: -1
+      },
+      select: {
+        tableId: 1,
+        tableRef: 1,
+        orderId: 1,
+        orderType: 1,
+        idbId: 1,
+        cart: 1,
+        note: 1,
+        status: 1,
+        isOnline: 1,
+        restaurantRef: 1,
+        "billRef.paymentDetails": 1,
+        "billRef.total": 1,
+        "billRef._id": 1,
+        "billRef.restaurantRef": 1,
+        createdAt: 1,
+        updatedAt: 1,
+        _id: 1
+      }
+    };
+
+    if (req.body.filters) {
+      let { paymentStatus, orderStatus, startDate, endDate, search, orderType } = req.body.filters;
+      let andFilters = [{
+        restaurantRef: req.session.user.restaurantRef,
+        status: {
+          '$in': [
+            app.config.contentManagement.order.active,
+            app.config.contentManagement.order.cooking,
+            app.config.contentManagement.order.served,
+            app.config.contentManagement.order.pending,
+            app.config.contentManagement.order.orderUpdatedFromCustomer,
+          ]
+        }
+      }];
+
+      if (search && search.trim().length) {
+        andFilters.push({ "orderId": new RegExp(`^${search.trim()}`, 'ig') });
+      }
+
+      if (paymentStatus) {
+        andFilters.push({ "billRef.paymentDetails.status": Number(paymentStatus) });
+      }
+
+      if (orderStatus) {
+        andFilters.push({ "status": Number(orderStatus) });
+      }
+
+      if (startDate && endDate) {
+        andFilters.push({
+          createdAt: {
+            $gte: new Date(startDate),
+            $lte: new Date(endDate)
+          }
+        });
+      } else if (startDate) {
+        andFilters.push({
+          createdAt: {
+            $gte: new Date(startDate)
+          }
+        });
+      } else if (endDate) {
+        andFilters.push({
+          createdAt: {
+            $lte: new Date(endDate)
+          }
+        });
+      }
+
+      if (orderType) {
+        andFilters.push({
+          "orderType": {
+            "$in": orderType
+          }
+        })
+      }
+
+      if (andFilters.length > 0) {
+        query.filters = { $and: andFilters };
+      }
+
+      query.select = {
+        tableId: 1,
+        tableRef: 1,
+        orderId: 1,
+        orderType: 1,
+        idbId: 1,
+        cart: 1,
+        note: 1,
+        status: 1,
+        isOnline: 1,
+        restaurantRef: 1,
+        "billRef.paymentDetails": 1,
+        "billRef.total": 1,
+        "billRef._id": 1,
+        "billRef.restaurantRef": 1,
+        createdAt: 1,
+        updatedAt: 1,
+        _id: 1
+      };
+    }
+    // if (req.body.sortConfig) {
+    //   let { name, uploadDateTime } = req.body.sortConfig;
+    //   if (name) {
+    //     query.sort.name = name;
+    //   } else if (uploadDateTime) {
+    //     query.sort.uploadDateTime = uploadDateTime;
+    //   }
+    // }
+
+    // order.list(query)
+    return Promise.all([
+      order.list(query),
+      req.body.orderList && req.body.orderList.length ? order.list(idbQuery) : []
+    ])
+      .then(([queryResult, idbResult]) => {
+        const output = idbResult && idbResult.data ? [...queryResult.data, ...idbResult.data] : [...queryResult.data];
+        req.workflow.outcome.data = {
+          data: output
+        };
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
   /**
    * Edits a order
    * @param  {Object}   req  Request 
@@ -1464,6 +1620,7 @@ module.exports = function (app) {
     syncMaster: syncMaster,
     updateByIdbId: updateByIdbId,
     getOngoingOrderList: getOngoingOrderList,
+    getOngoingOrderListV2: getOngoingOrderListV2,
     updateCartByIdbId: updateCartByIdbId,
     updateNote: updateNote,
     getKotsByOrderId: getKotsByOrderId,

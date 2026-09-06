@@ -43,6 +43,12 @@ module.exports = function (app, options) {
     options.validateBody(schemaValidator.list),
     controllers.list
   ]);
+
+  router.post('/list-v2', [
+    options.validateQuery(schemaValidator.listQuery),
+    options.validateBody(schemaValidator.list),
+    controllers.getBillListV2
+  ]);
   
 
   router.put('/make-payment/:billId', [

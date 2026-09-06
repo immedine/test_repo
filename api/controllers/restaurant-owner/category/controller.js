@@ -86,6 +86,59 @@ module.exports = function(app) {
       .catch(next);
   };
 
+  const getCategoryListFromOrder = (req, res, next) => {
+    let query = {
+      skip: Number(req.query.skip) || app.config.page.defaultSkip,
+      limit: Number(req.query.limit) || app.config.page.defaultLimit,
+      filters: {
+        status: app.config.contentManagement.category.active,
+        restaurantRef: req.session.user.restaurantRef
+      },
+      sort: {
+        order: 1
+      }
+    };
+
+    if (req.body.filters) {
+      let { name } = req.body.filters;
+      if (name) {
+        query.filters.name = new RegExp(`^${name}`, 'ig');
+      }
+    }
+    if (req.body.sortConfig) {
+      let { name,order } = req.body.sortConfig;
+      if (name) {
+        query.sort = {name};
+      } else if (order) {
+        query.sort = {order};
+      }
+    }
+
+    category.list(query)
+      .then(output => {
+        const data = [];
+        if (output?.data && output?.data.length > 0) {
+          output?.data.forEach((cat) => {
+            data.push({
+              _id: cat._id,
+              name: cat.name,
+              order: cat.order,
+              status: cat.status,
+              image: cat.image,
+              filterText: cat.filterText,
+              totalMenu: cat.totalMenu
+            });
+          });
+          
+        }
+        req.workflow.outcome.data = {
+          data
+        };
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
   /**
    * Edits a category
    * @param  {Object}   req  Request 
@@ -127,6 +180,7 @@ module.exports = function(app) {
     get: getCategory,
     edit: editCategory,
     list: getCategoryList,
+    getCategoryListFromOrder: getCategoryListFromOrder,
     delete: deleteCategory
   };
 

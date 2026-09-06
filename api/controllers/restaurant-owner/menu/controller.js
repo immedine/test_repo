@@ -112,6 +112,76 @@ module.exports = function(app) {
       .catch(next);
   };
 
+  const getMenuListFromOrder = (req, res, next) => {
+    let query = {
+      skip: Number(req.query.skip) || app.config.page.defaultSkip,
+      limit: Number(req.query.limit) || app.config.page.defaultLimit,
+      filters: {
+        status: app.config.contentManagement.menu.active,
+        restaurantRef: req.session.user.restaurantRef
+      },
+      populate: [{
+        path: 'ingredients.inventoryRef',
+        select: 'name unit quantity'
+      }],
+      sort: {
+        order: 1
+      }
+    };
+
+    if (req.body.filters) {
+      let { name, categoryRef, isVeg } = req.body.filters;
+      if (name) {
+        query.filters.name = new RegExp(`^${name}`, 'ig');
+      }
+      if (categoryRef) {
+        query.filters.categoryRef = categoryRef;
+      }
+      if (isVeg !== null && isVeg !== undefined) {
+        query.filters.isVeg = isVeg;
+      }
+    }
+    if (req.body.sortConfig) {
+      let { name,order } = req.body.sortConfig;
+      if (name) {
+        query.sort.name = name;
+      }
+      if (order) {
+        query.sort.order = order;
+      }
+    }
+
+    menu.list(query)
+      .then(output => {
+        const data = [];
+        if (output?.data && output?.data.length > 0) {
+          output?.data.forEach((menu) => {
+            data.push({
+              _id: menu._id,
+              name: menu.name,
+              price: menu.price,
+              categoryRef: menu.categoryRef,
+              excludeGST: menu.excludeGST,
+              excludeServiceCharge: menu.excludeServiceCharge,
+              images: menu.images && menu.images.length ? [menu.images[0]] : [],
+              isAvailable: menu.isAvailable,
+              isNonVeg: menu.isNonVeg,
+              isVeg: menu.isVeg,
+              isSpicy: menu.isSpicy,
+              order: menu.order,
+              status: menu.status
+            });
+          });
+          
+        }
+        req.workflow.outcome.data = {
+          data
+        };
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
   /**
    * Edits a menu
    * @param  {Object}   req  Request 
@@ -220,6 +290,7 @@ module.exports = function(app) {
     get: getMenu,
     edit: editMenu,
     list: getMenuList,
+    getMenuListFromOrder: getMenuListFromOrder,
     delete: deleteMenu,
     bulkAdd: bulkAdd,
     getMenuImages: getMenuImages,

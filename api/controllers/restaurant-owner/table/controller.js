@@ -94,6 +94,66 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const getTableListFromOrder = (req, res, next) => {
+    let query = {
+      skip: Number(req.query.skip) || app.config.page.defaultSkip,
+      limit: Number(req.query.limit) || app.config.page.defaultLimit,
+      filters: {
+        status: {
+          '$ne': app.config.contentManagement.table.deleted
+        },
+        restaurantRef: req.session.user.restaurantRef
+      },
+      sort: {},
+      populate: [{
+        path: 'currentSessionRef',
+        select: 'status orderRef',
+        populate: [{
+          path: 'orderRef',
+          select: 'createdAt orderId status idbId createdBy',
+          populate: [{
+            path: 'createdBy',
+            select: 'personalInfo _id'
+          }]
+        }]
+      }]
+    };
+
+    if (req.body.filters) {
+      let { tableId, status } = req.body.filters;
+      if (tableId) {
+        query.filters.tableId = new RegExp(`^${tableId}`, 'ig');
+      }
+      if (status) {
+        query.filters.status = status;
+      }
+    }
+
+    table.list(query)
+      .then(output => {
+        const data = [];
+        if (output?.data && output?.data.length > 0) {
+          output?.data.forEach((tab) => {
+            data.push({
+              _id: tab._id,
+              tableId: tab.tableId,
+              style: tab.style,
+              status: tab.status,
+              env: tab.env,
+              noOfSeats: tab.noOfSeats,
+              currentSessionRef: tab.currentSessionRef
+            });
+          });
+          
+        }
+        req.workflow.outcome.data = {
+          data
+        };
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
   /**
    * Edits a table
    * @param  {Object}   req  Request 
@@ -156,6 +216,7 @@ module.exports = function (app) {
     get: getTable,
     edit: editTable,
     list: getTableList,
+    getTableListFromOrder: getTableListFromOrder,
     delete: deleteTable
   };
 

@@ -141,6 +141,89 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const getBillListV2 = (req, res, next) => {
+    let query = {
+      skip: Number(req.query.skip) || app.config.page.defaultSkip,
+      limit: Number(req.query.limit) || app.config.page.defaultLimit,
+      filters: {},
+      sort: {
+        createdAt: -1
+      }
+    };
+
+    if (req.body.filters) {
+      let { paymentStatus, startDate, endDate, search, searchType } = req.body.filters;
+      let andFilters = [{
+        restaurantRef: req.session.user.restaurantRef
+      }];
+
+      if (searchType && search && search.trim().length) {
+        const obj = {};
+        obj[searchType] = new RegExp(`^${search.trim()}`, 'ig');
+        andFilters.push(obj);
+      }
+
+      if (paymentStatus) {
+        andFilters.push({ "paymentDetails.status": Number(paymentStatus) });
+      }
+
+      if (startDate && endDate) {
+        andFilters.push({
+          createdAt: {
+            $gte: new Date(startDate),
+            $lte: new Date(endDate)
+          }
+        });
+      } else if (startDate) {
+        andFilters.push({
+          createdAt: {
+            $gte: new Date(startDate)
+          }
+        });
+      } else if (endDate) {
+        andFilters.push({
+          createdAt: {
+            $lte: new Date(endDate)
+          }
+        });
+      }
+
+      if (andFilters.length > 0) {
+        query.filters = { $and: andFilters };
+      }
+
+      query.select = {
+        billNo: 1,
+        offlineId: 1,
+        total: 1,
+        "orderRef.tableId": 1,
+        "orderRef.status": 1,
+        "orderRef.orderType": 1,
+        "orderRef._id": 1,
+        "orderRef.idbId": 1,
+        createdAt: 1,
+        isRoundOff: 1,
+        _id: 1,
+        paymentDetails: 1,
+      };
+    }
+    // if (req.body.sortConfig) {
+    //   let { name, uploadDateTime } = req.body.sortConfig;
+    //   if (name) {
+    //     query.sort.name = name;
+    //   } else if (uploadDateTime) {
+    //     query.sort.uploadDateTime = uploadDateTime;
+    //   }
+    // }
+
+    bill.list(query)
+      .then(output => {
+        req.workflow.outcome.data = output;
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
 
   const handlePayment = (req, res, next) => {
 
@@ -194,6 +277,7 @@ module.exports = function (app) {
     get: getBill,
     getByOfflineId: getByOfflineId,
     list: getBillList,
+    getBillListV2: getBillListV2,
     handlePayment: handlePayment
   };
 

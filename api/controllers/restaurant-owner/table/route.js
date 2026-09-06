@@ -52,6 +52,12 @@ module.exports = function (app, options) {
     controllers.list
   ]);
 
+  router.post('/list-from-order', [
+    options.validateQuery(schemaValidator.listQuery),
+    options.validateBody(schemaValidator.list),
+    controllers.getTableListFromOrder
+  ]);
+
   /**
    * Fetches a table, edits a table and removes a table
    */
