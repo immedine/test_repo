@@ -1698,7 +1698,7 @@ module.exports = function (app) {
             orderRef: orderId,
             quantity: restoreUsage[invId],
             isDebited: false,
-            reason: "ORDER_UPDATE",
+            reason: !onlyRemove ? "ORDER_UPDATE" : "ORDER_CANCELLED",
             prevLocQuantity:
               restorePrevQuantity[invId]?.prevLocQuantity || 0,
             prevTotalQuantity:
@@ -1948,7 +1948,7 @@ module.exports = function (app) {
                 isDebited: true,
 
                 reason:
-                  "ORDER_UPDATE",
+                  !onlyRemove ? "ORDER_UPDATE" : "ORDER_CANCELLED",
 
                 prevLocQuantity:
                   newPrevQuantity[invId]

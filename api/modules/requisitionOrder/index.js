@@ -62,6 +62,13 @@ module.exports = function (app) {
           return Promise.reject({
             'errCode': 'REQUISITION_NOT_FOUND'
           });
+        } else if (requisitionOrderDetails.status === app.config.contentManagement.requisitionOrderStatus.deletedDueToPopupClose ||
+          requisitionOrderDetails.paymentStatus === app.config.contentManagement.requisitionOrderPaymentStatus.created ||
+          requisitionOrderDetails.paymentStatus === app.config.contentManagement.requisitionOrderPaymentStatus.paymentPending
+        ) {
+          return Promise.reject({
+            'errCode': 'REQUISITION_NOT_FOUND'
+          });
         } else {
           return Promise.resolve(requisitionOrderDetails);
         }

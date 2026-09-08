@@ -617,7 +617,13 @@ module.exports = function (app) {
       limit: Number(req.query.limit) || app.config.page.defaultLimit,
       filters: {
         requestedByRestaurantRef: req.session.user.restaurantRef,
-        status: { '$ne': app.config.contentManagement.requisitionOrderStatus.deletedDueToPopupClose }
+        status: { '$ne': app.config.contentManagement.requisitionOrderStatus.deletedDueToPopupClose },
+        paymentStatus: {
+          '$nin': [
+            app.config.contentManagement.requisitionOrderPaymentStatus.created,
+            app.config.contentManagement.requisitionOrderPaymentStatus.paymentPending
+          ]
+        }
       },
       sort: {
         createdAt: -1
