@@ -67,12 +67,15 @@ module.exports = function (app) {
     };
 
     if (req.body.filters) {
-      let { name, restaurantRef } = req.body.filters;
+      let { name, restaurantRef, categoryId } = req.body.filters;
       if (name) {
-        query.filters.name = new RegExp(`^${name}`, 'ig');
+        query.filters.name = new RegExp(`${name}`, 'ig');
       }
       if (restaurantRef) {
         query.filters.restaurantRef = restaurantRef;
+      }
+      if (categoryId) {
+        query.filters.categoryId = categoryId;
       }
     }
     if (req.body.sortConfig) {
