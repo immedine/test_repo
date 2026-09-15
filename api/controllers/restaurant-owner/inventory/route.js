@@ -56,6 +56,12 @@ module.exports = function (app, options) {
     controllers.list
   ]);
 
+  router.post('/list-from-menu', [
+    options.validateQuery(schemaValidator.listQuery),
+    options.validateBody(schemaValidator.list),
+    controllers.getInventoryListForMenu
+  ]);
+
   router.post('/download-report', [
     controllers.downloadReport
   ]);

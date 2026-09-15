@@ -75,7 +75,7 @@ module.exports = function (app) {
         query.filters.restaurantRef = restaurantRef;
       }
       if (categoryId) {
-        query.filters.categoryId = categoryId;
+        query.filters.categoryId = categoryId !== "UNCAT" ? categoryId : { $in: [null, undefined] };
       }
     }
     if (req.body.sortConfig) {
@@ -97,6 +97,68 @@ module.exports = function (app) {
                 return {
                   ...location._doc,
                   history: []
+                };
+              }) : []
+            }
+          })
+        };
+        req.workflow.outcome.data = filteredOutput;
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
+  const getInventoryListForMenu = (req, res, next) => {
+    let query = {
+      skip: Number(req.query.skip) || app.config.page.defaultSkip,
+      limit: Number(req.query.limit) || app.config.page.defaultLimit,
+      filters: {
+        status: app.config.contentManagement.inventory.active,
+        restaurantRef: req.session.user.restaurantRef
+      },
+      sort: {}
+    };
+
+    if (req.body.filters) {
+      let { name, restaurantRef, categoryId } = req.body.filters;
+      if (name) {
+        query.filters.name = new RegExp(`${name}`, 'ig');
+      }
+      if (restaurantRef) {
+        query.filters.restaurantRef = restaurantRef;
+      }
+      if (categoryId) {
+        query.filters.categoryId = categoryId !== "UNCAT" ? categoryId : { $in: [null, undefined] };
+      }
+    }
+    if (req.body.sortConfig) {
+      let { name } = req.body.sortConfig;
+      if (name) {
+        query.sort = { name };
+      }
+    }
+
+    inventory.list(query)
+      .then(output => {
+
+        // console.log("output ", output)
+        const filteredOutput = {
+          ...output,
+          data: output.data.map(item => {
+            return {
+              name: item._doc.name,
+              _id: item._doc._id,
+              unit: item._doc.unit,
+              saveAsUnit: item._doc.saveAsUnit,
+              status: item._doc.status,
+              quantity: item._doc.quantity,
+              // ...item._doc,
+              locationList: item._doc.locationList?.length ? item._doc.locationList.map(location => {
+                return {
+                  _id: location._doc._id,
+                  location: location._doc.location,
+                  quantity: location._doc.quantity,
+                  // ...location._doc,
                 };
               }) : []
             }
@@ -239,7 +301,8 @@ module.exports = function (app) {
     list: getInventoryList,
     delete: deleteInventory,
     seedInventory: seedInventory,
-    downloadReport: downloadReport
+    downloadReport: downloadReport,
+    getInventoryListForMenu: getInventoryListForMenu
   };
 
 };
