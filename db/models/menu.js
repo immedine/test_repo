@@ -1,6 +1,9 @@
 'use strict';
 module.exports = function (app, mongoose) {
   const schema = new mongoose.Schema({
+    code: {
+      type: String,
+    },
     images: [{
       type: String
     }],

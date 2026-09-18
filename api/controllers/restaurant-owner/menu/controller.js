@@ -159,6 +159,7 @@ module.exports = function(app) {
             data.push({
               _id: menu._id,
               name: menu.name,
+              code: menu.code,
               price: menu.price,
               categoryRef: menu.categoryRef,
               excludeGST: menu.excludeGST,
