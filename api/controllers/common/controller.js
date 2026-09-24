@@ -243,7 +243,7 @@ module.exports = function (app) {
     try {
 
       const { imageUrl } = await req.body;
-      // const imageUrl = 'https://immedine-bucket-2.s3.ap-south-1.amazonaws.com/app/dev/mo1p5u7j0pqkfbed4bce3byg.jpg';
+      // const imageUrl = 'https://immedine-bucket-4.s3.ap-south-1.amazonaws.com/app/dev/mo1p5u7j0pqkfbed4bce3byg.jpg';
 
       const result = await runOpenAIWorker(imageUrl);
 
