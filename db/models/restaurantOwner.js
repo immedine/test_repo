@@ -563,6 +563,7 @@ module.exports = function (app, mongoose /*, plugins*/) {
   restaurantOwnerSchema.statics.registerDevice = function (loginData, headerData) {
     return this.findOne({
       'personalInfo.email': loginData.email,
+      deviceRegistrationCode: loginData.deviceRegistrationCode,
       accountStatus: {
         $ne: app.config.user.accountStatus.restaurantOwner.deleted,
       },

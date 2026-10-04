@@ -76,7 +76,7 @@ module.exports = {
         greeting: 'Hi',
         message: (companyName) => `You have been successfully added to your outlet on ${companyName}.`,
         emailText: "Email",
-        codeText: "Code",
+        codeText: "Device Code",
       },
       owner: {
         signupConfirmation: {
