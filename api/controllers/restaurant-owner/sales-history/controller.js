@@ -3,7 +3,7 @@
  * This Controller handles all functionality of restaurant owner sales history
  * @module Controllers/RestaurantOwner/sales-history
  */
-module.exports = function(app) {
+module.exports = function (app) {
 
   /**
    * salesHistory module
@@ -62,7 +62,11 @@ module.exports = function(app) {
           $ne: app.config.contentManagement.salesHistory.deleted
         }
       },
-      sort: {}
+      sort: {},
+      populate: [{
+        path: 'createdBy',
+        select: 'personalInfo _id'
+      }]
     };
 
     if (req.body.filters) {

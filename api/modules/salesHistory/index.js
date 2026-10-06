@@ -28,7 +28,12 @@ module.exports = function (app) {
    * @return {Promise}        The promise
    */
   const findSalesHistoryById = function (salesHistoryId) {
-    return SalesHistory.findById(salesHistoryId);
+    return SalesHistory.findById(salesHistoryId)
+      .populate({
+        path: 'createdBy',
+        select: 'personalInfo _id'
+      })
+      .exec();
   };
 
   /**
