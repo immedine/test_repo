@@ -184,6 +184,7 @@ if (Object.prototype.hasOwnProperty.call(app.module, 'init')) {
       console.log(error);
       process.exit();
     } else {
+      app.module.order.startOrderQueueChangeStream(app);
       ///////////////////////
       // Listening on port //
       ///////////////////////
