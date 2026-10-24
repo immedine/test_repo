@@ -166,7 +166,7 @@ module.exports = function (app) {
   const sse = app.module.sse;
   const notification = app.module.notification;
   const menu = app.module.menu;
-  const user = app.module.user;
+  // const user = app.module.user;
   const kot = app.module.kot;
   const tempOTP = app.module.tempOTP;
 
@@ -1322,6 +1322,149 @@ module.exports = function (app) {
 
   };
 
+  const updateByIdbIdV2 = async (req, res, next) => {
+    try {
+      const user = req.session.user;
+      const orderId = req.params.orderId;
+
+      // 1. Get existing order
+      const orderData = await order.getOrderByIdbId(orderId, user);
+
+      const oldTableId = orderData.tableRef;
+      const oldOrderDataItems = [...orderData.cart];
+
+      // 2. Update order data
+      orderData.reOrderCount = orderData.reOrderCount
+        ? orderData.reOrderCount + 1
+        : 1;
+
+      if (req.body && Object.keys(req.body).length) {
+        Object.assign(orderData, req.body);
+      }
+
+      // 3. Inventory rollback + order update can potentially run in parallel
+      //    ONLY if order.edit() does not depend on inventory.rollbackInventory()
+      const [, orderOutput, billRes] = await Promise.all([
+        inventory.rollbackInventory(
+          orderData._id,
+          req.body.cart,
+          false,
+          orderData.reOrderCount,
+          user
+        ),
+
+        order.edit(orderData, user),
+        bill.updateBillFromOrder(
+          orderData.billRef,
+          {
+            subTotal: req.body.subTotal,
+            total: req.body.total,
+            gstDetails: req.body.gstDetails,
+            serviceTaxDetails: req.body.serviceTaxDetails
+          }
+        )
+      ]);
+
+      // 5. Generate KOT
+      const kotItems = generateKOTItems(
+        oldOrderDataItems,
+        req.body.cart || []
+      );
+
+      if (kotItems.length > 0) {
+        kot.create(
+          {
+            orderRef: orderData._id,
+            restaurantRef: user.restaurantRef,
+            items: kotItems
+          },
+          user
+        ).catch(err => {
+          console.log('err creating KOT', err);
+        });
+      }
+
+      // 6. Start non-critical operations without blocking response
+      sse.broadcastOrderUpdate({
+        orderId: orderData.idbId.toString(),
+        restaurantRef: user.restaurantRef.toString(),
+        type: "UPDATE_ORDER_BY_STAFF",
+        message: app.config.notification
+          .inApp(app, app.config.lang.defaultLanguage)
+          .toRestaurantOwner.updateOrder.body(
+            orderData.orderId,
+            user.personalInfo.fullName
+          ),
+        userRef: user._id.toString()
+      });
+
+      notification.sendInAppNotificationToRestaurantStaffs(
+        user.restaurantRef,
+        {
+          moduleName: 'orders',
+          notificationType: "UPDATE_ORDER_BY_STAFF",
+          message: app.config.notification
+            .inApp(app, app.config.lang.defaultLanguage)
+            .toRestaurantOwner.updateOrder.body(
+              orderData.orderId,
+              user.personalInfo.fullName
+            ),
+          redirectionId: orderData.idbId,
+          userRef: user._id,
+          staffName: user.personalInfo.fullName
+        }
+      );
+
+      // 7. Table handling
+      if (
+        req.body.tableRef &&
+        oldTableId &&
+        req.body.tableRef.toString() === oldTableId.toString()
+      ) {
+        tableSession.updateCartByOrderId(
+          orderData._id,
+          orderData.restaurantRef,
+          req.body.cart
+        );
+      }
+
+      if (
+        req.body.tableRef &&
+        (
+          !oldTableId ||
+          req.body.tableRef.toString() !== oldTableId.toString()
+        )
+      ) {
+        req.body.orderRef = orderData._id;
+
+        await tableSession.updateStatusByOrderId(
+          orderData._id,
+          orderData.restaurantRef
+        );
+
+        const tableSessionRes =
+          await tableSession.createTableSessionFromOwner(
+            req.body,
+            user
+          );
+
+        table.markAsUnavailable(
+          req.body.tableRef,
+          tableSessionRes._id
+        );
+      }
+
+      // 8. Response
+      orderOutput.billRef = billRes;
+
+      req.workflow.outcome.data = orderOutput;
+      req.workflow.emit('response');
+
+    } catch (err) {
+      next(err);
+    }
+  };
+
   const updateCartByIdbId = (req, res, next) => {
 
     order.getOrderByIdbId(req.params.orderId, req.session.user)
@@ -1607,6 +1750,24 @@ module.exports = function (app) {
 
   };
 
+  const addOrdersToQueue = async (req, res, next) => {
+    try {
+      const { orders } = req.body;
+
+      const result = await order.addOrdersToQueue(orders);
+
+      req.workflow.outcome.data = result.map((order) => ({
+        orderId: order.orderId,
+        queueId: order._id,
+        status: order.status,
+      }));
+      req.workflow.emit('response');
+
+    } catch (error) {
+      next(error);
+    }
+  };
+
   return {
     add: addOrder,
     get: getOrder,
@@ -1625,7 +1786,9 @@ module.exports = function (app) {
     updateNote: updateNote,
     getKotsByOrderId: getKotsByOrderId,
     getOrderOtpList: getOrderOtpList,
-    markAsDone: markAsDone
+    markAsDone: markAsDone,
+    updateByIdbIdV2: updateByIdbIdV2,
+    addOrdersToQueue: addOrdersToQueue
   };
 
 };

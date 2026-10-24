@@ -346,6 +346,20 @@ module.exports = function (app, mongoose) {
     sacCode: {
       type: String,
       default: ''
+    },
+    franchiseContactDetails: {
+      name: {
+        type: String,
+        default: ''
+      },
+      email: {
+        type: String,
+        default: ''
+      },
+      phone: {
+        countryCode: { type: String, default: 'IN' },
+        number: { type: String },
+      }
     }
   }, {
     versionKey: false,

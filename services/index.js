@@ -5,5 +5,6 @@ module.exports = function (app) {
 
   return {
     notification,
+    order: require('./order')(app),
   };
 };

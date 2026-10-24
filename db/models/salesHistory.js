@@ -36,6 +36,10 @@ module.exports = function(app, mongoose) {
         type: [Number],
         default: [0, 0]
       }
+    },
+    fullAddress: {
+      type: String,
+      default: ''
     }
   }, {
     versionKey: false,

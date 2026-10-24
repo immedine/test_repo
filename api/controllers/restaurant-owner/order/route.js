@@ -48,7 +48,7 @@ module.exports = function (app, options) {
     controllers.syncMaster
   ]);
 
-  
+
   router.post('/order-otp-list', [
     // options.validateBody(schemaValidator.add),
     controllers.getOrderOtpList
@@ -75,6 +75,11 @@ module.exports = function (app, options) {
     controllers.getOngoingOrderListV2
   ]);
 
+  router.post(
+    "/order-queue/bulk",
+    controllers.addOrdersToQueue
+  );
+
   router.put('/mark-done/:otpId', [
     options.validateParams(schemaValidator.otpParam),
     commonMiddlewares.validateId('TempOTP', 'otpId'),
@@ -91,6 +96,10 @@ module.exports = function (app, options) {
 
   router.put('/update-by-idbid/:orderId', [
     controllers.updateByIdbId
+  ]);
+
+  router.put('/update-by-idbid-v2/:orderId', [
+    controllers.updateByIdbIdV2
   ]);
 
   router.put('/update-cart-by-idbid/:orderId', [

@@ -77,6 +77,7 @@ module.exports = function(app) {
     KOT: db.model('KOT', require('./models/kot')(app, mongoose, plugins)),
     RequisitionAmountHistory: db.model('RequisitionAmountHistory', require('./models/requisitionAmountHistory')(app, mongoose, plugins)),
     TempOTP: db.model('TempOTP', require('./models/tempOtp')(app, mongoose, plugins)),
+    OrderQueue: db.model('OrderQueue', require('./models/orderQueue')(app, mongoose, plugins)),
   };
 
   return db;

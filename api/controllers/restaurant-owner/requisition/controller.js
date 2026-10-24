@@ -195,6 +195,8 @@ module.exports = function (app) {
       });
     }
 
+    const prevTotal = req.requisitionId.total || 0;
+
     if (Object.keys(req.body).length) {
       for (let key in req.body) {
         req.requisitionId[key] = req.body[key];
@@ -208,7 +210,25 @@ module.exports = function (app) {
     }
 
     requisition.edit(req.requisitionId, req.session.user)
-      .then(output => {
+      .then(async output => {
+        if (req.body.total !== undefined && prevTotal !== req.body.total) {
+          const isIncrease = req.body.total > prevTotal;
+          const amountDifference = Math.abs(prevTotal - req.body.total);
+
+          await restaurant.updateRestaurantRequisitionAmount(
+            req.requisitionId.requestedByRestaurantRef,
+            amountDifference,
+            !isIncrease
+          );
+          await requisitionAmountHistory.create({
+            restaurantRef: req.requisitionId.requestedByRestaurantRef,
+            masterRestaurantRef: req.requisitionId.requestedToRestaurantRef,
+            amount: amountDifference,
+            isDebited: isIncrease,
+            historyType: app.config.contentManagement.requisitionPaymentHistoryType.requisitionPartiallyApproved,
+            requisitionRef: req.requisitionId._id
+          });
+        }
         req.workflow.outcome.data = output;
         req.workflow.emit('response');
       })
@@ -243,7 +263,16 @@ module.exports = function (app) {
     }
 
     requisition.edit(req.requisitionId, req.session.user)
-      .then(output => {
+      .then(async output => {
+        restaurant.updateRestaurantRequisitionAmount(req.requisitionId.requestedByRestaurantRef, req.requisitionId.total, true);
+        await requisitionAmountHistory.create({
+          restaurantRef: req.requisitionId.requestedByRestaurantRef,
+          masterRestaurantRef: req.requisitionId.requestedToRestaurantRef,
+          amount: req.requisitionId.total,
+          isDebited: false,
+          historyType: app.config.contentManagement.requisitionPaymentHistoryType.requisitionRejected,
+          requisitionRef: req.requisitionId._id
+        });
         req.workflow.outcome.data = output;
         req.workflow.emit('response');
       })

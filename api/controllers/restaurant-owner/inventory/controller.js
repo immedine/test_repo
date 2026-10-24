@@ -7,7 +7,7 @@ const { inventoryCategories, inventoryItems } = require("../../../modules/cron/s
  * @module Controllers/Admin/inventory
  */
 module.exports = function (app) {
-
+  const mongoose = require('mongoose');
   /**
    * inventory module
    * @type {Object}
@@ -67,7 +67,7 @@ module.exports = function (app) {
     };
 
     if (req.body.filters) {
-      let { name, restaurantRef, categoryId } = req.body.filters;
+      let { name, restaurantRef, categoryId, locationId } = req.body.filters;
       if (name) {
         query.filters.name = new RegExp(`${name}`, 'ig');
       }
@@ -76,6 +76,9 @@ module.exports = function (app) {
       }
       if (categoryId) {
         query.filters.categoryId = categoryId !== "UNCAT" ? categoryId : { $in: [null, undefined] };
+      }
+      if (locationId) {
+        query.filters['locationList.location'] = locationId;
       }
     }
     if (req.body.sortConfig) {
@@ -120,7 +123,7 @@ module.exports = function (app) {
     };
 
     if (req.body.filters) {
-      let { name, restaurantRef, categoryId } = req.body.filters;
+      let { name, restaurantRef, categoryId, locationId } = req.body.filters;
       if (name) {
         query.filters.name = new RegExp(`${name}`, 'ig');
       }
@@ -129,6 +132,9 @@ module.exports = function (app) {
       }
       if (categoryId) {
         query.filters.categoryId = categoryId !== "UNCAT" ? categoryId : { $in: [null, undefined] };
+      }
+      if (locationId) {
+        query.filters['locationList.location'] = new mongoose.Types.ObjectId(locationId);
       }
     }
     if (req.body.sortConfig) {
@@ -158,6 +164,8 @@ module.exports = function (app) {
                   _id: location._doc._id,
                   location: location._doc.location,
                   quantity: location._doc.quantity,
+                  sellingPrice: location._doc.sellingPrice,
+                  avgRate: location._doc.avgRate,
                   // ...location._doc,
                 };
               }) : []
