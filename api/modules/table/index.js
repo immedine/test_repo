@@ -117,6 +117,22 @@ module.exports = function (app) {
       });
   };
 
+  const markAsUnavailableIdempotent = (tableId, tableSessionId, idempotencyKey) => {
+    return Table.findOne({
+      _id: tableId
+    })
+      .then(table => {
+        if (table) {
+          table.status = app.config.contentManagement.table.inActive;
+          table.currentSessionRef = tableSessionId;
+          table.idempotencyKey = idempotencyKey;
+          return table.save();
+        } else {
+          return Promise.resolve(null);
+        }
+      });
+  };
+
   /**
    * Fetches a list of inventories
    * @param  {Object} options  The options object
@@ -150,6 +166,7 @@ module.exports = function (app) {
     'edit': editTable,
     'list': getList,
     'remove': removeTable,
-    'markAsUnavailable': markAsUnavailable
+    'markAsUnavailable': markAsUnavailable,
+    'markAsUnavailableIdempotent': markAsUnavailableIdempotent
   };
 };

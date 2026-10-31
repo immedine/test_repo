@@ -211,5 +211,10 @@ module.exports = {
     requisitionCreated: 4,
     franchiseEdit: 5
   },
+  inventoryOperation: {
+    active: 1,
+    synced: 2,
+    deleted: 3
+  },
   defaultOrderOTPExpiryTime: 10 * 60 * 1000
 };

@@ -34,6 +34,24 @@ module.exports = function (app) {
     return KOT.createKOT(config);
   };
 
+  const createKOTIdempotent = async function (config, userRef, idempotencyKey) {
+    if (userRef) {
+      config.restaurantRef = userRef.restaurantRef;
+    }
+
+    // Generate kotNo if not provided
+    if (!config.kotNo) {
+      const totalKOTs = await KOT.countDocuments({
+        restaurantRef: config.restaurantRef,
+        orderRef: config.orderRef
+      });
+      config.kotNo = totalKOTs ? (totalKOTs + 1).toString() : "1";
+    }
+
+    config.idempotencyKey = idempotencyKey;
+    return KOT.createKOT(config);
+  };
+
   /**
    * Fetches a KOT by Id
    * @param  {String} kotId  The KOT id
@@ -124,6 +142,7 @@ module.exports = function (app) {
 
   return {
     'create': createKOT,
+    'createIdempotent': createKOTIdempotent,
     'get': findKOTById,
     'getByOrder': findKOTByOrderId,
     'list': getList,

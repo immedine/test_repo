@@ -302,6 +302,71 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const getInventoryOperationList = (req, res, next) => {
+
+    inventory.listInventoryOperation({
+      restaurantId: req.session.user.restaurantRef
+    })
+      .then(output => {
+        // console.log("output ", output)
+        req.workflow.outcome.data = output;
+        req.workflow.emit('response');
+      })
+      .catch(next);
+  };
+
+  const syncInventory = async (req, res, next) => {
+    try {
+      const results = [];
+
+      for (const eachOrder of req.body.orderIds) {
+        try {
+          // Wait until this order's rollback is completed.
+          if (eachOrder.operationType === "CREATE") {
+            const inventoryOutput =
+              await inventory.updateInventoryCount(
+                eachOrder.cart,
+                undefined,
+                eachOrder.userData
+              );
+
+            await inventory.updateHistoryOrderRef(
+              inventoryOutput.invIds,
+              eachOrder._id
+            ).catch(err => {
+              console.log(
+                "err updateHistoryOrderRef",
+                err
+              );
+            });
+          } else if (eachOrder.operationType === "UPDATE") {
+            await inventory.rollbackInventoryOffline(
+              eachOrder._id,
+              eachOrder.oldCart, // Replace with the cart if your function requires it.
+              eachOrder.userData,
+            );
+          }
+
+          results.push({
+            orderId: eachOrder._id,
+            success: true,
+          });
+        } catch (error) {
+          // Stop processing subsequent orders if one fails.
+          return next(error);
+        }
+      }
+
+      await inventory.markInventoryAsSynced(req.body.orderIds.map(order => order._id));
+
+      req.workflow.outcome.data = results;
+      req.workflow.emit('response');
+      
+    } catch (error) {
+      return next(error);
+    }
+  };
+
   return {
     add: addInventory,
     get: getInventory,
@@ -310,7 +375,9 @@ module.exports = function (app) {
     delete: deleteInventory,
     seedInventory: seedInventory,
     downloadReport: downloadReport,
-    getInventoryListForMenu: getInventoryListForMenu
+    getInventoryListForMenu: getInventoryListForMenu,
+    getInventoryOperationList: getInventoryOperationList,
+    syncInventory: syncInventory
   };
 
 };

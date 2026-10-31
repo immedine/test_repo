@@ -1226,6 +1226,16 @@ module.exports = function (app) {
 
     order.getOrderByIdbId(req.params.orderId, req.session.user)
       .then(async orderData => {
+
+        const existingInventoryOperation = await inventory.findInventoryOperationByOrderId({
+          orderRef: orderData._id,
+          status: app.config.contentManagement.inventoryOperation.active
+        }, req.session.user);
+
+        if (existingInventoryOperation) {
+          return next({ 'errCode': 'UNSYNCED_INV_FOR_THIS_ORDER' });
+        }
+
         const oldTableId = orderData.tableRef;
         const oldOrderDataItems = [...orderData.cart];
 
@@ -1572,6 +1582,15 @@ module.exports = function (app) {
       }
 
       if (!req.body.noRevertBack) {
+        const existingInventoryOperation = await inventory.findInventoryOperationByOrderId({
+          orderRef: orderData._id,
+          status: app.config.contentManagement.inventoryOperation.active
+        }, req.session.user);
+
+        if (existingInventoryOperation) {
+          return next({ 'errCode': 'UNSYNCED_INV_FOR_THIS_ORDER' });
+        }
+
         await inventory.rollbackInventory(orderData._id, req.body.cart, true, orderData.reOrderCount, req.session.user);
       }
 
@@ -1754,7 +1773,7 @@ module.exports = function (app) {
     try {
       const { orders } = req.body;
 
-      const result = await order.addOrdersToQueue(orders);
+      const result = await order.addOrdersToQueue(orders, req.session.user);
 
       req.workflow.outcome.data = result.map((order) => ({
         orderId: order.orderId,

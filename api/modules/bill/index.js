@@ -24,7 +24,17 @@ module.exports = function (app) {
       config.createdBy = userRef._id;
       config.addedByOwner = true;
     }
-    
+
+    return Bill.createBill(config);
+  };
+
+  const createBillIdempotent = async (config, userRef, idempotencyKey) => {
+    if (userRef) {
+      config.restaurantRef = userRef.restaurantRef;
+      config.createdBy = userRef._id;
+      config.addedByOwner = true;
+    }
+    config.idempotencyKey = idempotencyKey;
     return Bill.createBill(config);
   };
 
@@ -125,7 +135,7 @@ module.exports = function (app) {
       });
   };
 
-  const getByOfflineId = function (billId, userRef) {
+  const getByOfflineId = function (billId, userRef, noError) {
     return Bill.findOne({
       offlineId: billId
     })
@@ -137,8 +147,8 @@ module.exports = function (app) {
         }
       })
       .then(billDetails => {
-        if (!billDetails || (billDetails &&
-          billDetails.restaurantRef.toString() !== userRef.restaurantRef.toString())) {
+        if (!noError && (!billDetails || (billDetails &&
+          billDetails.restaurantRef.toString() !== userRef.restaurantRef.toString()))) {
           return Promise.reject({
             'errCode': 'BILL_NOT_FOUND'
           });
@@ -291,6 +301,7 @@ module.exports = function (app) {
 
   return {
     'create': createBill,
+    'createIdempotent': createBillIdempotent,
     'createMulti': createMultiBill,
     'get': findBillById,
     'getByOfflineId': getByOfflineId,

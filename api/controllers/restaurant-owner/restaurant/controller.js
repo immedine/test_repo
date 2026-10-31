@@ -28,10 +28,10 @@ module.exports = function (app) {
             phone: req.body.ownerInfo.phone
           }
         })
-        .then(output1 => {
-          req.workflow.emit('response');
-        })
-        .catch(next);
+          .then(output1 => {
+            req.workflow.emit('response');
+          })
+          .catch(next);
       })
       .catch(next);
   };
@@ -178,6 +178,33 @@ module.exports = function (app) {
       .catch(next);
   };
 
+  const checkOrderSync = async (req, res, next) => {
+    try {
+      const restaurantId = req.session.user?.restaurantRef;
+
+      if (!restaurantId) {
+        return res.status(400).json({
+          success: false,
+          message: "Restaurant information not found",
+        });
+      }
+
+      const restaurantData = await restaurant.get(restaurantId);
+
+      if (!restaurantData) {
+        return next({ 'errCode': 'RESTAURANT_NOT_FOUND' });
+      }
+
+      if (restaurantData.orderSyncing === true) {
+        return next({ 'errCode': 'ORDER_SYNC_IN_PROGRESS' });
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+
   return {
     create: addRestaurant,
     edit: editRestaurant,
@@ -190,6 +217,7 @@ module.exports = function (app) {
     updateServiceTaxDetails: updateServiceTaxDetails,
     updateWater: updateWater,
     updateBillDetails: updateBillDetails,
-    updateBranding: updateBranding
+    updateBranding: updateBranding,
+    checkOrderSync: checkOrderSync
   };
 };

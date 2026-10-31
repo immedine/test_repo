@@ -185,6 +185,7 @@ if (Object.prototype.hasOwnProperty.call(app.module, 'init')) {
       process.exit();
     } else {
       app.module.order.startOrderQueueChangeStream(app);
+      app.module.order.recoverOrderQueueOnStartup(app);
       ///////////////////////
       // Listening on port //
       ///////////////////////

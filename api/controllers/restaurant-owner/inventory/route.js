@@ -47,6 +47,15 @@ module.exports = function (app, options) {
     controllers.seedInventory
   ]);
 
+  router.post('/operation-list', [
+    controllers.getInventoryOperationList
+  ]);
+
+  router.post('/sync', [
+    options.validateBody(schemaValidator.syncInevntory),
+    controllers.syncInventory
+  ]);
+
   /**
    * Fetches a list of inventories
    */

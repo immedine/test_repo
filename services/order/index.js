@@ -19,106 +19,235 @@ module.exports = function (app) {
     const bill = app.module.bill;
     const table = app.module.table;
 
-    const inventoryOutput =
-      await inventory.updateInventoryCount(
+    const idbId = orderData.idbId;
+
+    if (!idbId) {
+      throw new Error("idbId is required for offline order");
+    }
+
+    // -------------------------------------------------------
+    // STEP 1: Find/create Order
+    // -------------------------------------------------------
+
+    let orderOutput = await order.getOrderByIdbId(
+      idbId,
+      userData,
+      true
+    );
+
+    if (!orderOutput) {
+      const createData = {
+        ...orderData,
+        isOnline: false
+      };
+
+      delete createData.updatedAt;
+
+      if (orderData.status === app.config.contentManagement.order.deleted) {
+        createData.isRestoredWhileCancel = !orderData.noRevertBack;
+      }
+
+      try {
+        orderOutput = await order.create(
+          createData,
+          userData
+        );
+      } catch (err) {
+        throw err;
+      }
+    }
+
+    if (!orderOutput) {
+      throw new Error(
+        `Unable to create/find offline order ${idbId}`
+      );
+    }
+
+    // return orderOutput;
+
+    // -------------------------------------------------------
+    // STEP 2: Create KOT if it doesn't exist
+    // -------------------------------------------------------
+
+    const existingKot = await kot.getByOrder(orderOutput._id, userData);
+
+    if (!existingKot) {
+      const kotItems = orderData.cart.map(item => ({
+        menuRef: item.menuRef,
+        menuName: item.name,
+        quantity: item.quantity,
+        operation: "add",
+        subItems: item.subItems
+          ? item.subItems.map(sub => ({
+            menuRef: item.menuRef,
+            name: sub.name,
+            quantity: sub.quantity,
+            price: sub.price,
+            operation: "add"
+          }))
+          : []
+      }));
+
+      try {
+        await kot.create({
+          orderRef: orderOutput._id,
+          restaurantRef: userData.restaurantRef,
+          items: kotItems
+        }, userData);
+      } catch (err) {
+        console.log("err creating KOT", err);
+      }
+    }
+
+    // -------------------------------------------------------
+    // STEP 3: Create Bill if it doesn't exist
+    // -------------------------------------------------------
+
+    let billOutput = await bill.getByOfflineId(idbId, userData, true);
+
+    if (!billOutput) {
+      const billObj = {
+        offlineId: idbId,
+        billNo: orderOutput.orderId,
+        orderRef: orderOutput._id,
+        subTotal: orderData.subTotal,
+        total: orderData.total,
+        gstDetails: orderData.gstDetails,
+        serviceTaxDetails: orderData.serviceTaxDetails,
+        paymentDetails: orderData.paymentDetails
+      };
+
+      if (orderData.status === app.config.contentManagement.order.completed ||
+        orderData.status === app.config.contentManagement.order.deleted
+      ) {
+        billObj.isRoundOff = orderData.isRoundOff !== undefined ? orderData.isRoundOff : billObj.isRoundOff;
+        billObj.isCGSTDisabled = orderData.isCGSTDisabled !== undefined ? orderData.isCGSTDisabled : billObj.isCGSTDisabled;
+        billObj.isServiceTaxDisabled = orderData.isServiceTaxDisabled !== undefined ? orderData.isServiceTaxDisabled : billObj.isServiceTaxDisabled;
+        billObj.isSGSTDisabled = orderData.isSGSTDisabled !== undefined ? orderData.isSGSTDisabled : billObj.isSGSTDisabled;
+        billObj.discountDetails = orderData.discountDetails !== undefined ? orderData.discountDetails : billObj.discountDetails;
+        billObj.paymentDetails = orderData.paymentDetails !== undefined ? orderData.paymentDetails : billObj.paymentDetails;
+      }
+
+      try {
+        billOutput = await bill.create(
+          billObj,
+          userData
+        );
+      } catch (err) {
+        throw err;
+      }
+    }
+
+    // -------------------------------------------------------
+    // STEP 4: Update Order with Bill
+    // -------------------------------------------------------
+
+    if (billOutput) {
+      await order.updateBillDetails(
+        orderOutput._id,
+        billOutput
+      );
+    }
+
+    // -------------------------------------------------------
+    // STEP 5: Table Session
+    // -------------------------------------------------------
+
+    if (
+      orderData.tableRef &&
+      orderData.status !==
+      app.config.contentManagement.order.completed &&
+      orderData.status !==
+      app.config.contentManagement.order.deleted
+    ) {
+      let tableSessionOutput =
+        await tableSession.getTableSessionByOrderId(orderOutput._id, userData.restaurantRef);
+
+      if (!tableSessionOutput) {
+        tableSessionOutput =
+          await tableSession.createTableSessionFromOwnerOffline(
+            orderData,
+            userData
+          );
+
+        tableSessionOutput.orderRef =
+          orderOutput._id;
+
+        await tableSession.edit(
+          tableSessionOutput
+        );
+      }
+
+      await table.markAsUnavailable(
+        orderData.tableRef,
+        tableSessionOutput._id
+      );
+    }
+
+    // -------------------------------------------------------
+    // STEP 6: Inventory Operation
+    // -------------------------------------------------------
+
+    if (orderData.status === app.config.contentManagement.order.completed) {
+      const inventoryOutput = await inventory.updateInventoryCount(
         orderData.cart,
         undefined,
         userData
       );
 
-    const orderOutput =
-      await order.create(
-        orderData,
-        userData
-      );
-
-    // Create KOT
-    const kotItems = orderData.cart.map(item => ({
-      menuRef: item.menuRef,
-      menuName: item.name,
-      quantity: item.quantity,
-      operation: "add",
-      subItems: item.subItems
-        ? item.subItems.map(sub => ({
-          menuRef: item.menuRef,
-          name: sub.name,
-          quantity: sub.quantity,
-          price: sub.price,
-          operation: "add"
-        }))
-        : []
-    }));
-
-    await kot.create({
-      orderRef: orderOutput._id,
-      restaurantRef: userData.restaurantRef,
-      items: kotItems
-    }, userData).catch(err => {
-      console.log("err creating KOT", err);
-    });
-
-    const billObj = {
-      offlineId: orderData.idbId,
-      billNo: orderOutput.orderId,
-      orderRef: orderOutput._id,
-      subTotal: orderData.subTotal,
-      total: orderData.total,
-      gstDetails: orderData.gstDetails,
-      serviceTaxDetails: orderData.serviceTaxDetails,
-      paymentDetails: orderData.paymentDetails
-    };
-
-    if (orderData.status === app.config.contentManagement.order.completed) {
-      billObj.isRoundOff = orderData.isRoundOff;
-      billObj.isCGSTDisabled = orderData.isCGSTDisabled;
-      billObj.isServiceTaxDisabled = orderData.isServiceTaxDisabled;
-      billObj.isSGSTDisabled = orderData.isSGSTDisabled;
-      billObj.discountDetails = orderData.discountDetails;
-    }
-
-    const billOutput = await bill.create(billObj, userData);
-
-    orderOutput.billDetails = billOutput;
-
-    order.updateBillDetails(
-      orderOutput._id,
-      billOutput
-    ).catch(err => {
-      console.log("err updateBillDetails", err);
-    });
-
-    if (orderData.tableRef && orderData.status !== app.config.contentManagement.order.completed &&
-      orderData.status !== app.config.contentManagement.order.deleted) {
-      const tableSessionOutput =
-        await tableSession.createTableSessionFromOwnerOffline(
-          orderData,
+      await inventory.updateHistoryOrderRef(
+        inventoryOutput.invIds,
+        orderOutput._id
+      ).catch(err => {
+        console.log(
+          "err updateHistoryOrderRef",
+          err
+        );
+      });
+    } else if (orderData.status === app.config.contentManagement.order.deleted) {
+      if (orderData.noRevertBack) {
+        const inventoryOutput = await inventory.updateInventoryCount(
+          orderData.cart,
+          undefined,
           userData
         );
-      table.markAsUnavailable(
-        orderData.tableRef,
-        tableSessionOutput._id
-      ).catch(err => {
-        console.log("err markAsUnavailable", err);
-      });
 
-      tableSessionOutput.orderRef = orderOutput._id;
+        await inventory.updateHistoryOrderRef(
+          inventoryOutput.invIds,
+          orderOutput._id
+        ).catch(err => {
+          console.log(
+            "err updateHistoryOrderRef",
+            err
+          );
+        });
+      }
 
-      tableSession.edit(
-        tableSessionOutput
-      ).catch(err => {
-        console.log("err tableSession", err);
-      });
+    } else {
+      const existingInventoryOperation =
+        await inventory.findInventoryOperationByOrderId({
+          orderRef: orderOutput._id,
+          operationType: "CREATE"
+        }, userData);
+
+      if (!existingInventoryOperation) {
+        try {
+          await inventory.createInventoryOperation({
+            restaurantRef:
+              userData.restaurantRef,
+            orderRef: orderOutput._id,
+            userRef: userData._id,
+            cart: orderData.cart,
+            operationType: "CREATE"
+          });
+        } catch (err) {
+          console.log(
+            "err createInventoryOperation",
+            err
+          );
+        }
+      }
     }
-
-    inventory.updateHistoryOrderRef(
-      inventoryOutput.invIds,
-      orderOutput._id
-    ).catch(err => {
-      console.log(
-        "err updateHistoryOrderRef",
-        err
-      );
-    });
 
     return orderOutput;
   };
@@ -148,6 +277,48 @@ module.exports = function (app) {
       );
     }
 
+    if (orderDataInput.status === app.config.contentManagement.order.completed) {
+      await inventory.rollbackInventory(
+        orderData._id,
+        orderDataInput.cart,
+        false,
+        orderData.reOrderCount,
+        userData
+      );
+    } else if (orderDataInput.status === app.config.contentManagement.order.deleted) {
+      if (!orderDataInput.noRevertBack) {
+        await inventory.rollbackInventory(
+          orderData._id,
+          orderDataInput.cart,
+          true,
+          orderData.reOrderCount,
+          userData
+        );
+      } else {
+        await inventory.rollbackInventory(
+          orderData._id,
+          orderDataInput.cart,
+          false,
+          orderData.reOrderCount,
+          userData
+        );
+      }
+
+    } else {
+      await inventory.createInventoryOperation({
+        restaurantRef: userData.restaurantRef,
+        orderRef: orderData._id,
+        userRef: userData._id,
+        cart: orderDataInput.cart,
+        oldCart: orderData.cart,
+        operationType: "UPDATE"
+      }).catch(err => {
+        console.log("err updateInventoryOperation", err);
+      });
+    }
+
+
+
     const oldTableId = orderData.tableRef;
     const oldOrderDataItems = [...orderData.cart];
 
@@ -164,16 +335,21 @@ module.exports = function (app) {
       }
     }
 
-    /*
-     * Rollback inventory based on the updated cart.
-     */
-    await inventory.rollbackInventory(
-      orderData._id,
-      orderDataInput.cart,
-      false,
-      orderData.reOrderCount,
-      userData
-    );
+    if (orderDataInput.updatedAt) {
+      orderData.lastOfflineUpdatedAt = new Date(
+        orderDataInput.updatedAt
+      );
+    }
+
+    if (orderData.createdAt) {
+      delete orderData.createdAt;
+    }
+
+    if (orderDataInput.status === app.config.contentManagement.order.deleted) {
+      orderData.isRestoredWhileCancel = !orderDataInput.noRevertBack;
+    }
+
+    orderData.isOnline = false;
 
     /*
      * Update the actual order.
@@ -193,13 +369,15 @@ module.exports = function (app) {
       serviceTaxDetails: orderDataInput.serviceTaxDetails
     };
 
-    if (orderDataInput.status === app.config.contentManagement.order.completed) {
-      billObj.isRoundOff = orderDataInput.isRoundOff;
-      billObj.isCGSTDisabled = orderDataInput.isCGSTDisabled;
-      billObj.isServiceTaxDisabled = orderDataInput.isServiceTaxDisabled;
-      billObj.isSGSTDisabled = orderDataInput.isSGSTDisabled;
-      billObj.discountDetails = orderDataInput.discountDetails;
-      billObj.paymentDetails = orderDataInput.paymentDetails;
+    if (orderDataInput.status === app.config.contentManagement.order.completed ||
+      orderDataInput.status === app.config.contentManagement.order.deleted
+    ) {
+      billObj.isRoundOff = orderDataInput.isRoundOff !== undefined ? orderDataInput.isRoundOff : billObj.isRoundOff;
+      billObj.isCGSTDisabled = orderDataInput.isCGSTDisabled !== undefined ? orderDataInput.isCGSTDisabled : billObj.isCGSTDisabled;
+      billObj.isServiceTaxDisabled = orderDataInput.isServiceTaxDisabled !== undefined ? orderDataInput.isServiceTaxDisabled : billObj.isServiceTaxDisabled;
+      billObj.isSGSTDisabled = orderDataInput.isSGSTDisabled !== undefined ? orderDataInput.isSGSTDisabled : billObj.isSGSTDisabled;
+      billObj.discountDetails = orderDataInput.discountDetails !== undefined ? orderDataInput.discountDetails : billObj.discountDetails;
+      billObj.paymentDetails = orderDataInput.paymentDetails !== undefined ? orderDataInput.paymentDetails : billObj.paymentDetails;
     }
 
     const billRes = await bill.updateBillFromOrder(

@@ -88,12 +88,21 @@ module.exports = function(app) {
     }
   };
 
+  const syncInevntory = {
+    'orderIds': {
+      type: 'array',
+      required: true,
+      allowEmpty: false
+    },
+  }
+
   return {
     add: addInventory,
     edit: addInventory,
     listQuery: listQuery,
     param: param,
     list: list,
+    syncInevntory: syncInevntory
   };
 
 };

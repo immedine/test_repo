@@ -9,7 +9,12 @@ module.exports = function (app, mongoose) {
       type: String,
       required: true,
       index: true,
-      unique: true
+      unique: true,
+      sparse: true
+    },
+    lastOfflineUpdatedAt: {
+      type: Date,
+      default: null,
     },
     note: {
       type: String
@@ -140,7 +145,11 @@ module.exports = function (app, mongoose) {
     otpDetails: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: 'TempOTP'
-    }]
+    }],
+    idempotencyKey: {
+      type: String,
+      default: null,
+    }
   }, {
     versionKey: false,
     timestamps: true,

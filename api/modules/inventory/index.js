@@ -17,6 +17,247 @@ module.exports = function (app) {
   const Menu = app.models.Menu;
   const Order = app.models.Order;
   const InventoryHistory = app.models.InventoryHistory;
+  const InventoryOperation = app.models.InventoryOperation;
+
+  const createInventoryOperation = function (config) {
+    return InventoryOperation.createInventoryOperation(config);
+  };
+
+  const listInventoryOperation = async function (config) {
+    const docs = await InventoryOperation.aggregate([
+      {
+        $match: {
+          restaurantRef: config.restaurantId,
+          status: app.config.contentManagement.inventoryOperation.active
+        }
+      },
+
+      {
+        $lookup: {
+          from: 'restaurantowners',
+          let: {
+            userId: '$userRef'
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ['$_id', '$$userId']
+                }
+              }
+            },
+            {
+              $project: {
+                _id: 1,
+                'personalInfo.fullName': 1
+              }
+            }
+          ],
+          as: 'userRef'
+        }
+      },
+      {
+        $unwind: {
+          path: '$userRef',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+
+      {
+        $lookup: {
+          from: 'orders',
+          let: {
+            orderRef: '$orderRef'
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', '$$orderRef'] },
+                    {
+                      $not: [
+                        {
+                          $in: ['$status', [
+                            app.config.contentManagement.order.deleted,
+                            app.config.contentManagement.order.completed
+                          ]]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              $project: {
+                _id: 1,
+                orderId: 1,
+                status: 1,
+                createdAt: 1
+              }
+            }
+          ],
+          as: 'orderRef'
+        }
+      },
+
+      // 3. Convert orderRef array to object
+      {
+        $unwind: '$orderRef'
+      },
+
+      {
+        $lookup: {
+          from: 'menus',
+          let: {
+            menuIds: '$cart.menuRef'
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ['$_id', '$$menuIds']
+                }
+              }
+            },
+            {
+              $project: {
+                _id: 1,
+                name: 1,
+                ingredients: 1
+              }
+            }
+          ],
+          as: 'menuDocs'
+        }
+      },
+
+      {
+        $set: {
+          cart: {
+            $map: {
+              input: '$cart',
+              as: 'cartItem',
+              in: {
+                $mergeObjects: [
+                  '$$cartItem',
+                  {
+                    menuRef: {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: '$menuDocs',
+                            as: 'menu',
+                            cond: {
+                              $eq: ['$$menu._id', '$$cartItem.menuRef']
+                            }
+                          }
+                        },
+                        0
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+
+      // {
+      //   $lookup: {
+      //     from: 'inventories',
+      //     localField: 'menuDocs.ingredients.inventoryRef',
+      //     foreignField: '_id',
+      //     as: 'inventoryDocs'
+      //   }
+      // },
+
+      // {
+      //   $set: {
+      //     cart: {
+      //       $map: {
+      //         input: '$cart',
+      //         as: 'cartItem',
+      //         in: {
+      //           $mergeObjects: [
+      //             '$$cartItem',
+      //             {
+      //               menuRef: {
+      //                 $mergeObjects: [
+      //                   '$$cartItem.menuRef',
+      //                   {
+      //                     ingredients: {
+      //                       $map: {
+      //                         input: '$$cartItem.menuRef.ingredients',
+      //                         as: 'ingredient',
+      //                         in: {
+      //                           $mergeObjects: [
+      //                             '$$ingredient',
+      //                             {
+      //                               inventoryRef: {
+      //                                 $arrayElemAt: [
+      //                                   {
+      //                                     $filter: {
+      //                                       input: '$inventoryDocs',
+      //                                       as: 'inventory',
+      //                                       cond: {
+      //                                         $eq: [
+      //                                           '$$inventory._id',
+      //                                           '$$ingredient.inventoryRef'
+      //                                         ]
+      //                                       }
+      //                                     }
+      //                                   },
+      //                                   0
+      //                                 ]
+      //                               }
+      //                             }
+      //                           ]
+      //                         }
+      //                       }
+      //                     }
+      //                   }
+      //                 ]
+      //               }
+      //             }
+      //           ]
+      //         }
+      //       }
+      //     }
+      //   }
+      // },
+
+      {
+        $project: {
+          menuDocs: 0,
+          inventoryDocs: 0
+        }
+      }
+    ]);
+
+    const grouped = docs.reduce((acc, doc) => {
+      const key = doc.orderRef._id.toString();
+
+      if (!acc[key]) {
+        acc[key] = [];
+      }
+
+      acc[key].push(doc);
+
+      return acc;
+    }, {});
+
+    return grouped;
+  };
+
+  const findInventoryOperationByOrderId = function (orderData, userRef) {
+    return InventoryOperation.findOne({
+      ...orderData,
+      restaurantRef: userRef.restaurantRef
+    }).sort({ updatedAt: -1 });
+  };
 
   /**
    * Creates a Inventory
@@ -1510,6 +1751,7 @@ module.exports = function (app) {
     reOrderCount,
     userData
   ) {
+
     const session = await app.db.startSession();
 
     try {
@@ -1710,7 +1952,7 @@ module.exports = function (app) {
           };
 
           if (!onlyRemove) {
-            historyData.reOrderCount = reOrderCount;
+            historyData.reOrderCount = reOrderCount || 1;
           }
 
           historyDocs.push(historyData);
@@ -1964,7 +2206,7 @@ module.exports = function (app) {
                 userName:
                   userData.personalInfo?.fullName,
 
-                reOrderCount,
+                reOrderCount: reOrderCount || 1,
 
                 menuRef:
                   newIngredientMenuRef[invId]
@@ -2025,6 +2267,658 @@ module.exports = function (app) {
 
     } finally {
 
+      await session.endSession();
+    }
+  }
+
+  function getObjectIdString(value) {
+    if (!value) {
+      return null;
+    }
+
+    if (value._id) {
+      return value._id.toString();
+    }
+
+    return value.toString();
+  }
+
+  async function rollbackInventoryOffline(
+    orderId,
+    oldCart = [],
+    userData
+  ) {
+    const session = await app.db.startSession();
+
+    try {
+      session.startTransaction();
+
+      // =====================================================
+      // STEP 1: Fetch existing order
+      // =====================================================
+
+      const existingOrder = await Order.findById(orderId)
+        .populate({
+          path: "cart.menuRef",
+          populate: {
+            path: "ingredients.inventoryRef"
+          }
+        })
+        .session(session)
+        .lean();
+
+      if (!existingOrder) {
+        throw {
+          errCode: "ORDER_NOT_FOUND"
+        };
+      }
+
+      // =====================================================
+      // STEP 1: Prepare old and new carts
+      // =====================================================
+
+      const previousCart = Array.isArray(oldCart) ? oldCart : [];
+      const latestCart = Array.isArray(existingOrder.cart) ? existingOrder.cart : [];
+
+      // Populate old cart so that we have:
+      // menuRef.ingredients.inventoryRef
+      const populatedOldCart = await Order.populate(previousCart, {
+        path: "menuRef",
+        model: "Menu",
+        populate: {
+          path: "ingredients.inventoryRef",
+          model: "Inventory"
+        }
+      });
+
+      // =====================================================
+      // STEP 2: Find which old items need to be restored
+      // =====================================================
+
+      const restoreUsage = {};
+      const restoreUsageLoc = {};
+      const restorePrevQuantity = {};
+      const restoreUsageMenuRef = {};
+
+      for (const oldItem of populatedOldCart) {
+        if (!oldItem || !oldItem.menuRef) {
+          continue;
+        }
+
+        const oldItemId = oldItem._id?.toString();
+
+        const newItem = latestCart.find(
+          item =>
+            item &&
+            item._id &&
+            oldItemId &&
+            item._id.toString() === oldItemId
+        );
+
+        /*
+         * Restore old inventory when:
+         *
+         * 1. Item was removed
+         * 2. Quantity changed
+         * 3. Menu changed
+         *
+         * We restore the complete old quantity.
+         * Later we deduct the complete new quantity.
+         */
+        const oldMenuId = getObjectIdString(oldItem.menuRef);
+
+        const newMenuId = newItem
+          ? getObjectIdString(newItem.menuRef)
+          : null;
+
+        const quantityChanged =
+          newItem &&
+          Number(oldItem.quantity || 0) !==
+          Number(newItem.quantity || 0);
+
+        const menuChanged =
+          newItem &&
+          oldMenuId !== newMenuId;
+
+        const itemRemoved = !newItem;
+
+        const shouldRestore =
+          itemRemoved ||
+          quantityChanged ||
+          menuChanged;
+
+        if (!shouldRestore) {
+          continue;
+        }
+
+        const ingredients = oldItem.menuRef.ingredients || [];
+
+        for (const ing of ingredients) {
+          if (
+            !ing ||
+            !ing.inventoryRef ||
+            !ing.location
+          ) {
+            continue;
+          }
+
+          const inventoryId =
+            ing.inventoryRef._id.toString();
+
+          const locationId =
+            ing.location.toString();
+
+          const qty =
+            Number(ing.quantity || 0) *
+            Number(oldItem.quantity || 0);
+
+          if (!qty) {
+            continue;
+          }
+
+          if (!restoreUsage[inventoryId]) {
+            restoreUsage[inventoryId] = 0;
+
+            restoreUsageMenuRef[inventoryId] =
+              oldItem.menuRef._id ||
+              oldItem.menuRef;
+          }
+
+          restoreUsage[inventoryId] += qty;
+
+          restoreUsageLoc[inventoryId] = locationId;
+
+          const locationData =
+            ing.inventoryRef.locationList?.find(
+              loc =>
+                loc.location &&
+                loc.location.toString() === locationId
+            );
+
+          restorePrevQuantity[inventoryId] = {
+            prevLocQuantity:
+              locationData?.quantity || 0,
+
+            prevTotalQuantity:
+              ing.inventoryRef.quantity || 0
+          };
+        }
+      }
+
+      // =====================================================
+      // STEP 2A: Restore old inventory
+      // =====================================================
+
+      const restoreInventoryIds =
+        Object.keys(restoreUsage);
+
+      if (restoreInventoryIds.length > 0) {
+        const restoreOps =
+          restoreInventoryIds.map(invId => ({
+            updateOne: {
+              filter: {
+                _id: new mongoose.Types.ObjectId(invId)
+              },
+
+              update: {
+                $inc: {
+                  "locationList.$[loc].quantity":
+                    restoreUsage[invId],
+
+                  quantity:
+                    restoreUsage[invId]
+                }
+              },
+
+              arrayFilters: [
+                {
+                  "loc.location":
+                    new mongoose.Types.ObjectId(
+                      restoreUsageLoc[invId]
+                    )
+                }
+              ]
+            }
+          }));
+
+        await Inventory.bulkWrite(
+          restoreOps,
+          {
+            session,
+            ordered: false
+          }
+        );
+
+        // Fetch updated inventory documents ONCE
+        const inventories =
+          await Inventory.find({
+            _id: {
+              $in: restoreInventoryIds.map(
+                id =>
+                  new mongoose.Types.ObjectId(id)
+              )
+            }
+          })
+            .session(session)
+            .lean();
+
+        const inventoryMap =
+          new Map(
+            inventories.map(inv => [
+              inv._id.toString(),
+              inv
+            ])
+          );
+
+        const historyDocs = [];
+
+        for (const invId of restoreInventoryIds) {
+          const inventory =
+            inventoryMap.get(invId);
+
+          if (!inventory) {
+            continue;
+          }
+
+          historyDocs.push({
+            restaurantRef:
+              inventory.restaurantRef,
+
+            inventoryRef:
+              inventory._id,
+
+            locationRef:
+              new mongoose.Types.ObjectId(
+                restoreUsageLoc[invId]
+              ),
+
+            orderRef:
+              orderId,
+
+            quantity:
+              restoreUsage[invId],
+
+            isDebited: false,
+
+            reason: "ORDER_UPDATE",
+
+            prevLocQuantity:
+              restorePrevQuantity[invId]
+                ?.prevLocQuantity || 0,
+
+            prevTotalQuantity:
+              restorePrevQuantity[invId]
+                ?.prevTotalQuantity || 0,
+
+            userRef:
+              userData._id,
+
+            userName:
+              userData.personalInfo?.fullName,
+
+            menuRef:
+              restoreUsageMenuRef[invId]
+          });
+        }
+
+        if (historyDocs.length > 0) {
+          await InventoryHistory.insertMany(
+            historyDocs,
+            {
+              session,
+              ordered: false
+            }
+          );
+        }
+      }
+
+      // =====================================================
+      // STEP 3: Find new/changed items to deduct
+      // =====================================================
+
+      const inventoryItems =
+        latestCart.filter(newItem => {
+          if (
+            !newItem ||
+            !newItem.menuRef
+          ) {
+            return false;
+          }
+
+          const newItemId =
+            newItem._id?.toString();
+
+          const oldItem =
+            populatedOldCart.find(
+              item =>
+                item &&
+                item._id &&
+                newItemId &&
+                item._id.toString() === newItemId
+            );
+
+          // New item
+          if (!oldItem) {
+            return true;
+          }
+
+          const oldMenuId =
+            getObjectIdString(oldItem.menuRef);
+
+          const newMenuId =
+            getObjectIdString(newItem.menuRef);
+
+          const menuChanged =
+            oldMenuId !== newMenuId;
+
+          const quantityChanged =
+            Number(oldItem.quantity || 0) !==
+            Number(newItem.quantity || 0);
+
+          return (
+            menuChanged ||
+            quantityChanged
+          );
+        });
+
+      // =====================================================
+      // STEP 3A: Deduct inventory for new/latest items
+      // =====================================================
+
+      if (inventoryItems.length > 0) {
+        const menuIds = [
+          ...new Set(
+            inventoryItems.map(
+              item =>
+                getObjectIdString(
+                  item.menuRef
+                )
+            )
+          )
+        ];
+
+        const menus =
+          await Menu.find({
+            _id: {
+              $in: menuIds.map(
+                id =>
+                  new mongoose.Types.ObjectId(id)
+              )
+            }
+          })
+            .populate(
+              "ingredients.inventoryRef"
+            )
+            .session(session)
+            .lean();
+
+        const menuMap =
+          new Map(
+            menus.map(menu => [
+              menu._id.toString(),
+              menu
+            ])
+          );
+
+        // =================================================
+        // Calculate new ingredient usage
+        // =================================================
+
+        const newIngredientUsage = {};
+        const newIngredientLoc = {};
+        const newPrevQuantity = {};
+        const newIngredientMenuRef = {};
+
+        for (const item of inventoryItems) {
+          const menuId =
+            getObjectIdString(
+              item.menuRef
+            );
+
+          const menu =
+            menuMap.get(menuId);
+
+          if (!menu) {
+            throw {
+              errCode: "MENU_NOT_FOUND"
+            };
+          }
+
+          const ingredients =
+            menu.ingredients || [];
+
+          for (const ing of ingredients) {
+            if (
+              !ing ||
+              !ing.inventoryRef ||
+              !ing.location
+            ) {
+              continue;
+            }
+
+            const inventoryId =
+              ing.inventoryRef._id.toString();
+
+            const locationId =
+              ing.location.toString();
+
+            const qty =
+              Number(ing.quantity || 0) *
+              Number(item.quantity || 0);
+
+            if (!qty) {
+              continue;
+            }
+
+            if (!newIngredientUsage[inventoryId]) {
+              newIngredientUsage[inventoryId] = 0;
+
+              newIngredientMenuRef[inventoryId] =
+                item.menuRef;
+            }
+
+            newIngredientUsage[inventoryId] +=
+              qty;
+
+            newIngredientLoc[inventoryId] =
+              locationId;
+
+            const locationData =
+              ing.inventoryRef.locationList?.find(
+                loc =>
+                  loc.location &&
+                  loc.location.toString() ===
+                  locationId
+              );
+
+            newPrevQuantity[inventoryId] = {
+              prevLocQuantity:
+                locationData?.quantity || 0,
+
+              prevTotalQuantity:
+                ing.inventoryRef.quantity || 0
+            };
+          }
+        }
+
+        // =================================================
+        // Deduct inventory
+        // =================================================
+
+        const deductInventoryIds =
+          Object.keys(
+            newIngredientUsage
+          );
+
+        if (deductInventoryIds.length > 0) {
+          const deductOps =
+            deductInventoryIds.map(invId => ({
+              updateOne: {
+                filter: {
+                  _id: new mongoose.Types.ObjectId(
+                    invId
+                  )
+                },
+
+                update: {
+                  $inc: {
+                    "locationList.$[loc].quantity":
+                      -newIngredientUsage[invId],
+
+                    quantity:
+                      -newIngredientUsage[invId]
+                  }
+                },
+
+                arrayFilters: [
+                  {
+                    "loc.location":
+                      new mongoose.Types.ObjectId(
+                        newIngredientLoc[invId]
+                      )
+                  }
+                ]
+              }
+            }));
+
+          await Inventory.bulkWrite(
+            deductOps,
+            {
+              session,
+              ordered: false
+            }
+          );
+
+          // ===============================================
+          // Fetch inventories ONCE
+          // ===============================================
+
+          const inventories =
+            await Inventory.find({
+              _id: {
+                $in: deductInventoryIds.map(
+                  id =>
+                    new mongoose.Types.ObjectId(
+                      id
+                    )
+                )
+              }
+            })
+              .session(session)
+              .lean();
+
+          const inventoryMap =
+            new Map(
+              inventories.map(inv => [
+                inv._id.toString(),
+                inv
+              ])
+            );
+
+          const historyDocs = [];
+
+          for (
+            const invId of deductInventoryIds
+          ) {
+            const inventory =
+              inventoryMap.get(invId);
+
+            if (!inventory) {
+              continue;
+            }
+
+            historyDocs.push({
+              restaurantRef:
+                inventory.restaurantRef,
+
+              inventoryRef:
+                inventory._id,
+
+              locationRef:
+                new mongoose.Types.ObjectId(
+                  newIngredientLoc[invId]
+                ),
+
+              orderRef:
+                orderId,
+
+              quantity:
+                newIngredientUsage[invId],
+
+              isDebited: true,
+
+              reason: "ORDER_UPDATE",
+
+              prevLocQuantity:
+                newPrevQuantity[invId]
+                  ?.prevLocQuantity || 0,
+
+              prevTotalQuantity:
+                newPrevQuantity[invId]
+                  ?.prevTotalQuantity || 0,
+
+              userRef:
+                userData._id,
+
+              userName:
+                userData.personalInfo?.fullName,
+
+              menuRef:
+                newIngredientMenuRef[invId]
+            });
+          }
+
+          if (historyDocs.length > 0) {
+            await InventoryHistory.insertMany(
+              historyDocs,
+              {
+                session,
+                ordered: false
+              }
+            );
+          }
+        }
+      }
+
+      // =====================================================
+      // STEP 4: Commit transaction
+      // =====================================================
+
+      await session.commitTransaction();
+
+      return {
+        success: true,
+        message:
+          "Order updated and inventory adjusted"
+      };
+
+    } catch (err) {
+      try {
+        if (session.inTransaction()) {
+          await session.abortTransaction();
+        }
+      } catch (abortErr) {
+        console.error(
+          "rollbackInventory abort error:",
+          abortErr
+        );
+      }
+
+      console.error(
+        "rollbackInventory error:",
+        err
+      );
+
+      if (err?.errCode) {
+        throw err;
+      }
+
+      throw {
+        success: false,
+        error: err?.message || err
+      };
+
+    } finally {
       await session.endSession();
     }
   }
@@ -3663,6 +4557,18 @@ module.exports = function (app) {
     }
   };
 
+  const markInventoryAsSynced = async (orderIds) => {
+    try {
+      await InventoryOperation.updateMany(
+        { orderRef: { $in: orderIds } },
+        { $set: { status: app.config.contentManagement.inventoryOperation.synced } }
+      );
+      return Promise.resolve({ success: true, message: "Inventory marked as synced" });
+    } catch (err) {
+      return Promise.reject({ success: false, error: err.message });
+    }
+  };
+
   return {
     'create': createInventory,
     'get': findInventoryById,
@@ -3679,6 +4585,11 @@ module.exports = function (app) {
     downloadReport: downloadReport,
     getCount: getInventoryCount,
     updateInventoryCountForRequisition: updateInventoryCountForRequisition,
-    addInventoryCountForRequisition: addInventoryCountForRequisition
+    addInventoryCountForRequisition: addInventoryCountForRequisition,
+    createInventoryOperation: createInventoryOperation,
+    listInventoryOperation: listInventoryOperation,
+    markInventoryAsSynced: markInventoryAsSynced,
+    rollbackInventoryOffline: rollbackInventoryOffline,
+    findInventoryOperationByOrderId: findInventoryOperationByOrderId
   };
 };

@@ -16,6 +16,7 @@ module.exports = function (app) {
   const Order = app.models.Order;
   const Table = app.models.Table;
   const OrderQueue = app.models.OrderQueue;
+  const Restaurant = app.models.Restaurant;
 
   /**
    * Creates a Order
@@ -27,7 +28,6 @@ module.exports = function (app) {
       config.createdBy = userRef._id;
       config.addedByOwner = true;
       config.restaurantRef = userRef.restaurantRef;
-
     }
 
     if (config.tableRef) {
@@ -41,6 +41,45 @@ module.exports = function (app) {
       restaurantRef: userRef ? userRef.restaurantRef : config.restaurantRef
     });
     config.orderId = totalOrders ? (totalOrders + 1).toString() : "1";
+    return Order.createOrder(config);
+  };
+
+  const createOrderIdempotent = async (config, userRef) => {
+    if (userRef) {
+      config.createdBy = userRef._id;
+      config.addedByOwner = true;
+      config.restaurantRef = userRef.restaurantRef;
+    }
+
+    /*
+   * ---------------------------------------------------------
+   * 1. Check whether this offline operation already created
+   *    an order.
+   * ---------------------------------------------------------
+   */
+    const existingOrder = await Order.findOne({
+      restaurantRef: config.restaurantRef,
+      idbId: config.idbId
+    });
+
+    if (existingOrder) {
+      return existingOrder;
+    }
+
+    if (config.tableRef) {
+      const tableDetails = await Table.findById(config.tableRef);
+      if (tableDetails) {
+        config.tableId = tableDetails.tableId;
+      }
+    }
+
+    const totalOrders = await Order.countDocuments({
+      restaurantRef: userRef ? userRef.restaurantRef : config.restaurantRef
+    });
+    config.orderId = totalOrders ? (totalOrders + 1).toString() : "1";
+    if (idempotencyKey) {
+      config.idempotencyKey = idempotencyKey;
+    }
     return Order.createOrder(config);
   };
 
@@ -189,7 +228,7 @@ module.exports = function (app) {
       });
   };
 
-  const getOrderByIdbId = function (orderId, userRef) {
+  const getOrderByIdbId = function (orderId, userRef, noError) {
     return Order.findOne({
       idbId: orderId
     })
@@ -201,8 +240,8 @@ module.exports = function (app) {
         select: '_id personalInfo'
       })
       .then(orderDetails => {
-        if (!orderDetails || (orderDetails && userRef &&
-          orderDetails.restaurantRef.toString() !== userRef.restaurantRef.toString())) {
+        if (!noError && (!orderDetails || (orderDetails && userRef &&
+          orderDetails.restaurantRef.toString() !== userRef.restaurantRef.toString()))) {
           return Promise.reject({
             'errCode': 'ORDER_NOT_FOUND'
           });
@@ -387,173 +426,241 @@ module.exports = function (app) {
     return Promise.resolve(!!exists);
   };
 
-  const addOrdersToQueue = async (orders) => {
-    if (!orders?.length) {
+  /*
+ * Offline order queue processor.
+ *
+ * Features:
+ * - Sequential processing per restaurant.
+ * - Different restaurants process concurrently.
+ * - MongoDB is the durable queue.
+ * - Startup recovery for stale PROCESSING records.
+ * - Change Stream triggers plus direct processing.
+ * - Retry on MongoDB WriteConflict.
+ *
+ * IMPORTANT:
+ * This in-memory restaurant lock assumes ONE Node.js/PM2 worker.
+ * Multiple workers require a database-backed restaurant lease.
+ */
+
+  const { randomUUID } = require("node:crypto");
+
+  const MAX_ORDER_RETRIES = 3;
+  const PROCESSING_STALE_AFTER_MS = 10 * 60 * 1000;
+
+  const restaurantQueueStates = new Map();
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const isWriteConflict = (error) =>
+    error?.code === 112 ||
+    error?.codeName === "WriteConflict" ||
+    /write conflict/i.test(error?.message || "");
+
+  const getRestaurantQueueState = (key) => {
+    if (!restaurantQueueStates.has(key)) {
+      restaurantQueueStates.set(key, {
+        isProcessing: false,
+        rerunRequested: false,
+      });
+    }
+
+    return restaurantQueueStates.get(key);
+  };
+
+  /**
+   * Add one offline batch.
+   */
+  const addOrdersToQueuex = async (orders, user) => {
+    if (!Array.isArray(orders) || orders.length === 0) {
       return [];
     }
 
-    const orderIds = orders.map(
-      (order) => order.orderId
-    );
+    const restaurantId = user.restaurantRef;
+    const orderSyncId = randomUUID();
+    const startedAt = new Date();
 
-    /*
-     * Get existing queue documents for all incoming orders
-     */
-    const existingQueueOrders = await OrderQueue.find(
+    // Atomically allow only one active batch per restaurant.
+    const restaurant = await Restaurant.findOneAndUpdate(
       {
-        orderId: {
-          $in: orderIds,
-        },
+        _id: restaurantId,
+        orderSyncing: { $ne: true },
       },
       {
-        _id: 1,
-        orderId: 1,
-        restaurantId: 1,
-        userId: 1,
-        deviceId: 1,
-        operation: 1,
-        payload: 1,
-        status: 1,
-      }
-    ).lean();
-
-    const existingQueueMap = new Map(
-      existingQueueOrders.map((item) => [
-        item.orderId,
-        item,
-      ])
+        $set: {
+          orderSyncing: true,
+          orderSyncStartedAt: startedAt,
+          orderSyncId,
+        },
+      },
+      { new: true }
     );
 
-    const operations = [];
+    if (!restaurant) {
+      const error = new Error(
+        "Order synchronization is already in progress"
+      );
 
-    /*
-     * Keep track of what happened to each incoming order.
-     */
-    const resultMap = new Map();
+      error.statusCode = 409;
+      throw error;
+    }
 
-    for (const order of orders) {
-      const existingQueue =
-        existingQueueMap.get(order.orderId);
+    console.log(
+      `Starting order sync for restaurant ${restaurantId}; ` +
+      `batch ${orderSyncId}; ${orders.length} incoming orders`
+    );
 
-      /*
-       * No existing queue document.
-       *
-       * Insert it.
-       */
-      if (!existingQueue) {
-        operations.push({
-          updateOne: {
-            filter: {
-              orderId: order.orderId,
-            },
+    try {
+      const orderIds = [
+        ...new Set(orders.map((order) => order.orderId)),
+      ];
 
-            update: {
-              $set: {
-                restaurantId: order.restaurantId,
-                userId: order.userId,
-                deviceId: order.deviceId,
-                operation: order.operation,
-                payload: order.payload,
-                status: "PENDING",
-                processingAt: null,
-                processedAt: null,
-                lastError: null,
-              },
+      const existingQueueOrders = await OrderQueue.find(
+        {
+          restaurantId,
+          orderId: { $in: orderIds },
+          status: { $ne: "SYNCED" },
+        },
+        {
+          _id: 1,
+          orderId: 1,
+          restaurantId: 1,
+          payload: 1,
+          operation: 1,
+          status: 1,
+          orderSyncId: 1,
+        }
+      ).lean();
 
-              $setOnInsert: {
+      const existingQueueMap = new Map(
+        existingQueueOrders.map((item) => [
+          item.orderId,
+          item,
+        ])
+      );
+
+      const operations = [];
+      const resultMap = new Map();
+
+      for (const order of orders) {
+        if (
+          !order?.orderId ||
+          !order.operation ||
+          !order.payload
+        ) {
+          resultMap.set(order?.orderId, {
+            orderId: order?.orderId ?? null,
+            status: "INVALID_ORDER",
+          });
+
+          continue;
+        }
+
+        const existingQueue = existingQueueMap.get(
+          order.orderId
+        );
+
+        // New order: insert it into the durable queue.
+        if (!existingQueue) {
+          operations.push({
+            updateOne: {
+              filter: {
+                restaurantId,
                 orderId: order.orderId,
-                retryCount: 0,
               },
+
+              update: {
+                $set: {
+                  restaurantId,
+                  userId: order.userId,
+                  deviceId: order.deviceId,
+                  operation: order.operation,
+                  payload: order.payload,
+                  orderSyncId,
+                  status: "PENDING",
+                  processingAt: null,
+                  processedAt: null,
+                  lastError: null,
+                },
+
+                $setOnInsert: {
+                  orderId: order.orderId,
+                  retryCount: 0,
+                },
+              },
+
+              upsert: true,
             },
+          });
 
-            upsert: true,
-          },
-        });
+          resultMap.set(order.orderId, {
+            orderId: order.orderId,
+            status: "QUEUED",
+          });
 
-        resultMap.set(order.orderId, {
-          orderId: order.orderId,
-          status: "QUEUED",
-        });
+          continue;
+        }
 
-        continue;
-      }
+        // Avoid overwriting an existing CREATE operation.
+        if (order.operation === "CREATE") {
+          resultMap.set(order.orderId, {
+            orderId: order.orderId,
+            queueId: existingQueue._id,
+            status: "ALREADY_EXISTS",
+          });
 
-      /*
-       * CREATE operation
-       *
-       * Normally there should not be another CREATE
-       * for the same orderId.
-       *
-       * If one exists, don't overwrite it blindly.
-       */
-      if (order.operation === "CREATE") {
-        resultMap.set(order.orderId, {
-          orderId: order.orderId,
-          status: "ALREADY_EXISTS",
-        });
+          continue;
+        }
 
-        continue;
-      }
+        if (order.operation !== "UPDATE") {
+          resultMap.set(order.orderId, {
+            orderId: order.orderId,
+            queueId: existingQueue._id,
+            status: "UNSUPPORTED_OPERATION",
+          });
 
-      /*
-       * UPDATE operation
-       *
-       * Compare incoming updatedAt with the
-       * updatedAt already stored in OrderQueue.
-       */
-      if (order.operation === "UPDATE") {
-        const incomingUpdatedAt =
-          order.payload?.updatedAt;
+          continue;
+        }
 
+        /*
+         * Do not overwrite the payload while a worker is processing it.
+         * The client should retry this update after processing finishes.
+         */
+        if (existingQueue.status === "PROCESSING") {
+          resultMap.set(order.orderId, {
+            orderId: order.orderId,
+            queueId: existingQueue._id,
+            status: "PROCESSING_TRY_AGAIN",
+          });
+
+          continue;
+        }
+
+        const incomingUpdatedAt = order.payload?.updatedAt;
         const existingUpdatedAt =
           existingQueue.payload?.updatedAt;
 
-        /*
-         * If incoming payload does not contain updatedAt,
-         * you can either reject it or allow it.
-         *
-         * For safety, I'm rejecting it here.
-         */
-        if (!incomingUpdatedAt) {
+        if (
+          !incomingUpdatedAt ||
+          Number.isNaN(
+            new Date(incomingUpdatedAt).getTime()
+          )
+        ) {
           resultMap.set(order.orderId, {
             orderId: order.orderId,
+            queueId: existingQueue._id,
             status: "INVALID_UPDATED_AT",
           });
 
           continue;
         }
 
-        const incomingDate =
-          new Date(incomingUpdatedAt);
-
-        /*
-         * Invalid incoming timestamp
-         */
-        if (Number.isNaN(incomingDate.getTime())) {
-          resultMap.set(order.orderId, {
-            orderId: order.orderId,
-            status: "INVALID_UPDATED_AT",
-          });
-
-          continue;
-        }
-
-        /*
-         * If existing queue has updatedAt,
-         * compare the two timestamps.
-         */
+        // Reject stale or duplicate updates.
         if (existingUpdatedAt) {
-          const existingDate =
-            new Date(existingUpdatedAt);
+          const existingDate = new Date(existingUpdatedAt);
 
-          /*
-           * Existing queue has a newer or equal update.
-           *
-           * Do NOT replace it.
-           */
           if (
             !Number.isNaN(existingDate.getTime()) &&
-            incomingDate <= existingDate
+            new Date(incomingUpdatedAt) <= existingDate
           ) {
             resultMap.set(order.orderId, {
               orderId: order.orderId,
@@ -566,24 +673,24 @@ module.exports = function (app) {
         }
 
         /*
-         * Incoming update is newer.
-         *
-         * Replace the queue payload and make it
-         * PENDING again so Change Stream processes it.
+         * The status condition protects against a worker claiming
+         * this queue record after our initial read.
          */
         operations.push({
           updateOne: {
             filter: {
               _id: existingQueue._id,
+              status: { $ne: "PROCESSING" },
             },
 
             update: {
               $set: {
-                restaurantId: order.restaurantId,
+                restaurantId,
                 userId: order.userId,
                 deviceId: order.deviceId,
-                operation: order.operation,
+                operation: "UPDATE",
                 payload: order.payload,
+                orderSyncId,
                 status: "PENDING",
                 processingAt: null,
                 processedAt: null,
@@ -601,161 +708,549 @@ module.exports = function (app) {
           status: "QUEUED",
         });
       }
-    }
 
-    /*
-     * Execute all inserts/updates together.
-     */
-    if (operations.length > 0) {
-      await OrderQueue.bulkWrite(
-        operations,
-        {
-          ordered: false,
-        }
-      );
-    }
-
-    /*
-     * Fetch the actual queue documents again.
-     *
-     * This is useful for newly inserted documents because
-     * their _id is generated by MongoDB.
-     */
-    const finalQueueOrders = await OrderQueue.find(
-      {
-        orderId: {
-          $in: orderIds,
-        },
-      },
-      {
-        _id: 1,
-        orderId: 1,
-        status: 1,
+      if (operations.length > 0) {
+        await OrderQueue.bulkWrite(
+          operations,
+          { ordered: false }
+        );
       }
-    ).lean();
 
-    const finalQueueMap = new Map(
-      finalQueueOrders.map((item) => [
-        item.orderId,
-        item,
-      ])
-    );
+      const finalQueueOrders = await OrderQueue.find(
+        {
+          restaurantId,
+          orderId: { $in: orderIds },
+        },
+        {
+          _id: 1,
+          orderId: 1,
+          status: 1,
+          orderSyncId: 1,
+        }
+      ).lean();
 
-    /*
-     * Return one result for every incoming order.
-     */
-    return orders.map((order) => {
-      const result =
-        resultMap.get(order.orderId);
+      const finalQueueMap = new Map(
+        finalQueueOrders.map((item) => [
+          item.orderId,
+          item,
+        ])
+      );
 
-      const queueOrder =
-        finalQueueMap.get(order.orderId);
+      const results = orders.map((order) => {
+        const result = resultMap.get(order.orderId);
+        const queueOrder = finalQueueMap.get(order.orderId);
 
-      /*
-       * If this was a newly inserted order,
-       * get the generated queueId.
-       */
-      if (
-        result?.status === "QUEUED" &&
-        queueOrder
-      ) {
+        // The worker may have claimed the item between our read
+        // and our conditional update.
+        if (
+          result?.status === "QUEUED" &&
+          queueOrder?.status === "PROCESSING"
+        ) {
+          return {
+            orderId: order.orderId,
+            queueId: queueOrder._id,
+            status: "PROCESSING_TRY_AGAIN",
+          };
+        }
+
         return {
           orderId: order.orderId,
-          queueId: queueOrder._id,
-          status: queueOrder.status,
+          queueId:
+            result?.queueId ||
+            queueOrder?._id ||
+            null,
+
+          status:
+            result?.status ||
+            queueOrder?.status ||
+            "UNKNOWN",
         };
-      }
+      });
+
+      // Process directly; don't rely only on Change Streams.
+      void processRestaurantQueue(restaurantId);
+
+      // Handles batches containing no processable items.
+      await checkAndCompleteOrderSync(
+        restaurantId,
+        orderSyncId
+      );
+
+      return results;
+    } catch (error) {
+      console.error(
+        `Could not enqueue offline batch ${orderSyncId}`,
+        error
+      );
 
       /*
-       * Older update / invalid update / etc.
+       * bulkWrite can partially succeed.
+       * Do not clear the sync flag if this batch still has work.
        */
-      return {
-        orderId: order.orderId,
-        queueId:
-          result?.queueId ||
-          queueOrder?._id ||
-          null,
-        status:
-          result?.status ||
-          queueOrder?.status ||
-          "UNKNOWN",
-      };
-    });
+      const outstanding = await OrderQueue.countDocuments({
+        restaurantId,
+        orderSyncId,
+        status: {
+          $in: ["PENDING", "PROCESSING", "FAILED"],
+        },
+      }).catch(() => 1);
+
+      if (outstanding === 0) {
+        await Restaurant.updateOne(
+          {
+            _id: restaurantId,
+            orderSyncId,
+          },
+          {
+            $set: {
+              orderSyncing: false,
+              orderSyncStartedAt: null,
+              orderSyncId: null,
+            },
+          }
+        );
+      } else {
+        void processRestaurantQueue(restaurantId);
+      }
+
+      throw error;
+    }
   };
 
-  const processingQueue = [];
-  let isProcessingQueue = false;
+  const addOrdersToQueue = async (orders, user) => {
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return [];
+    }
 
-  const sleep = (ms) =>
-    new Promise((resolve) => setTimeout(resolve, ms));
+    const restaurantId = user.restaurantRef;
+    const orderSyncId = randomUUID();
+    const startedAt = new Date();
 
-
-  const isWriteConflict = (error) => {
-    return (
-      error?.code === 112 ||
-      error?.codeName === "WriteConflict" ||
-      error?.message?.includes("Write conflict")
-    );
-  };
-
-
-  /**
-   * Process one OrderQueue document.
-   *
-   * Only one order is processed at a time because
-   * inventory functions can update the same inventory
-   * documents concurrently.
-   */
-  const processOrderQueue = async (
-    queueId,
-    maxRetries = 3
-  ) => {
-    console.log("Processing queueId:", queueId);
-
-    /*
-     * Atomically claim the queue record.
-     *
-     * If another process already claimed it,
-     * findOneAndUpdate returns null.
-     */
-    const queueOrder = await OrderQueue.findOneAndUpdate(
+    const restaurant = await Restaurant.findOneAndUpdate(
       {
-        _id: queueId,
-        status: "PENDING",
+        _id: restaurantId,
+        orderSyncing: { $ne: true },
       },
       {
         $set: {
-          status: "PROCESSING",
-          processingAt: new Date(),
+          orderSyncing: true,
+          orderSyncStartedAt: startedAt,
+          orderSyncId,
         },
       },
+      { new: true }
+    );
+
+    if (!restaurant) {
+      throw new Error("Order synchronization is already in progress");
+    }
+
+    try {
+      const orderIds = [
+        ...new Set(
+          orders
+            .map((order) => order?.orderId)
+            .filter(Boolean)
+        ),
+      ];
+
+      // 1. Fetch existing queue records
+      const existingQueueOrders = await OrderQueue.find(
+        {
+          restaurantId,
+          orderId: { $in: orderIds },
+          status: { $ne: "SYNCED" },
+        },
+        {
+          _id: 1,
+          orderId: 1,
+          restaurantId: 1,
+          payload: 1,
+          operation: 1,
+          status: 1,
+          orderSyncId: 1,
+        }
+      ).lean();
+
+      const existingQueueMap = new Map(
+        existingQueueOrders.map((item) => [item.orderId, item])
+      );
+
+      // 2. Fetch existing orders from Order collection
+      const existingOrders = await Order.find(
+        {
+          restaurantRef: restaurantId,
+          idbId: { $in: orderIds },
+        },
+        {
+          _id: 1,
+          idbId: 1,
+          lastOfflineUpdatedAt: 1,
+        }
+      ).lean();
+
+      const existingOrderMap = new Map(
+        existingOrders.map((item) => [item.idbId, item])
+      );
+
+      const operations = [];
+      const resultMap = new Map();
+
+      for (const order of orders) {
+        if (!order?.orderId || !order.operation || !order.payload) {
+          resultMap.set(order?.orderId ?? null, {
+            orderId: order?.orderId ?? null,
+            status: "INVALID_ORDER",
+          });
+
+          continue;
+        }
+
+        const existingQueue = existingQueueMap.get(order.orderId);
+        const existingOrder = existingOrderMap.get(order.orderId);
+
+        // 3. Handle CREATE operation
+        if (order.operation === "CREATE") {
+          if (existingQueue || existingOrder) {
+            resultMap.set(order.orderId, {
+              orderId: order.orderId,
+              queueId: existingQueue?._id ?? null,
+              status: "ALREADY_EXISTS",
+            });
+
+            continue;
+          }
+
+          operations.push({
+            updateOne: {
+              filter: {
+                restaurantId,
+                orderId: order.orderId,
+              },
+              update: {
+                $set: {
+                  restaurantId,
+                  userId: order.userId,
+                  deviceId: order.deviceId,
+                  operation: "CREATE",
+                  payload: order.payload,
+                  orderSyncId,
+                  status: "PENDING",
+                  processingAt: null,
+                  processedAt: null,
+                  lastError: null,
+                },
+                $setOnInsert: {
+                  orderId: order.orderId,
+                  retryCount: 0,
+                },
+              },
+              upsert: true,
+            },
+          });
+
+          resultMap.set(order.orderId, {
+            orderId: order.orderId,
+            status: "QUEUED",
+          });
+
+          continue;
+        }
+
+        // 4. Validate operation
+        if (order.operation !== "UPDATE") {
+          resultMap.set(order.orderId, {
+            orderId: order.orderId,
+            status: "UNSUPPORTED_OPERATION",
+          });
+
+          continue;
+        }
+
+        // 5. Validate incoming updatedAt
+        const incomingDate = new Date(order.payload.updatedAt);
+
+        if (
+          !order.payload.updatedAt ||
+          Number.isNaN(incomingDate.getTime())
+        ) {
+          resultMap.set(order.orderId, {
+            orderId: order.orderId,
+            status: "INVALID_UPDATED_AT",
+          });
+
+          continue;
+        }
+
+        // 6. Do not overwrite an order currently being processed
+        if (existingQueue?.status === "PROCESSING") {
+          resultMap.set(order.orderId, {
+            orderId: order.orderId,
+            queueId: existingQueue._id,
+            status: "PROCESSING_TRY_AGAIN",
+          });
+
+          continue;
+        }
+
+        // 7. Compare incoming timestamp with queue and Order DB
+        const queueDate = existingQueue?.payload?.updatedAt
+          ? new Date(existingQueue.payload.updatedAt)
+          : null;
+
+        const dbDate = existingOrder?.lastOfflineUpdatedAt
+          ? new Date(existingOrder.lastOfflineUpdatedAt)
+          : null;
+
+        const validDates = [queueDate, dbDate].filter(
+          (date) => date && !Number.isNaN(date.getTime())
+        );
+
+        const latestDate =
+          validDates.length > 0
+            ? new Date(
+              Math.max(...validDates.map((date) => date.getTime()))
+            )
+            : null;
+
+        if (latestDate && incomingDate <= latestDate) {
+          resultMap.set(order.orderId, {
+            orderId: order.orderId,
+            queueId: existingQueue?._id ?? null,
+            status: "SKIPPED_OLDER_UPDATE",
+          });
+
+          continue;
+        }
+
+        // 8. Insert new UPDATE queue record
+        if (!existingQueue) {
+          operations.push({
+            updateOne: {
+              filter: {
+                restaurantId,
+                orderId: order.orderId,
+              },
+              update: {
+                $set: {
+                  restaurantId,
+                  userId: order.userId,
+                  deviceId: order.deviceId,
+                  operation: "UPDATE",
+                  payload: order.payload,
+                  orderSyncId,
+                  status: "PENDING",
+                  processingAt: null,
+                  processedAt: null,
+                  lastError: null,
+                },
+                $setOnInsert: {
+                  orderId: order.orderId,
+                  retryCount: 0,
+                },
+              },
+              upsert: true,
+            },
+          });
+
+          resultMap.set(order.orderId, {
+            orderId: order.orderId,
+            status: "QUEUED",
+          });
+
+          continue;
+        }
+
+        // 9. Update existing queue record only if not PROCESSING
+        operations.push({
+          updateOne: {
+            filter: {
+              _id: existingQueue._id,
+              status: { $ne: "PROCESSING" },
+            },
+            update: {
+              $set: {
+                userId: order.userId,
+                deviceId: order.deviceId,
+                operation: "UPDATE",
+                payload: order.payload,
+                orderSyncId,
+                status: "PENDING",
+                processingAt: null,
+                processedAt: null,
+                lastError: null,
+              },
+            },
+          },
+        });
+
+        resultMap.set(order.orderId, {
+          orderId: order.orderId,
+          queueId: existingQueue._id,
+          status: "QUEUED",
+        });
+      }
+
+      // 10. Execute bulk operations
+      if (operations.length > 0) {
+        await OrderQueue.bulkWrite(operations, {
+          ordered: false,
+        });
+      }
+
+      // 11. Re-fetch final queue records
+      const finalQueueOrders = await OrderQueue.find(
+        {
+          restaurantId,
+          orderId: { $in: orderIds },
+        },
+        {
+          _id: 1,
+          orderId: 1,
+          status: 1,
+        }
+      ).lean();
+
+      const finalQueueMap = new Map(
+        finalQueueOrders.map((item) => [item.orderId, item])
+      );
+
+      const results = orders.map((order) => {
+        const result = resultMap.get(order?.orderId ?? null);
+
+        if (!result || result.status !== "QUEUED") {
+          return result || {
+            orderId: order?.orderId ?? null,
+            status: "INVALID_ORDER",
+          };
+        }
+
+        const finalQueue = finalQueueMap.get(order.orderId);
+
+        if (!finalQueue) {
+          return {
+            ...result,
+            status: "QUEUE_WRITE_FAILED",
+          };
+        }
+
+        if (finalQueue.status === "PROCESSING") {
+          return {
+            ...result,
+            queueId: finalQueue._id,
+            status: "PROCESSING_TRY_AGAIN",
+          };
+        }
+
+        return {
+          ...result,
+          queueId: finalQueue._id,
+          status:
+            finalQueue.status === "PENDING"
+              ? "QUEUED"
+              : finalQueue.status,
+        };
+      });
+
+      // 12. Start queue processing
+      void processRestaurantQueue(restaurantId);
+
+      await checkAndCompleteOrderSync(restaurantId, orderSyncId);
+
+      return results;
+    } catch (error) {
+      // 13. Check whether this sync still has active queue records
+      const remainingOrders = await OrderQueue.countDocuments({
+        restaurantId,
+        orderSyncId,
+        status: {
+          $in: ["PENDING", "PROCESSING"],
+        },
+      });
+
+      if (remainingOrders === 0) {
+        await Restaurant.updateOne(
+          {
+            _id: restaurantId,
+            orderSyncId,
+          },
+          {
+            $set: {
+              orderSyncing: false,
+            },
+            $unset: {
+              orderSyncStartedAt: 1,
+              orderSyncId: 1,
+            },
+          }
+        );
+      } else {
+        void processRestaurantQueue(restaurantId);
+      }
+
+      throw error;
+    }
+  };
+
+  /**
+   * Complete a batch only when all its queue items are resolved.
+   *
+   * FAILED is intentionally unresolved until retried or handled.
+   */
+  const checkAndCompleteOrderSync = async (restaurantId, orderSyncId) => {
+    if (!restaurantId || !orderSyncId) return false;
+
+    const outstanding = await OrderQueue.countDocuments({
+      restaurantId,
+      orderSyncId,
+      status: { $in: ["PENDING", "PROCESSING"] },
+    });
+
+    if (outstanding > 0) return false;
+
+    const result = await Restaurant.updateOne(
       {
-        new: true,
+        _id: restaurantId,
+        orderSyncId,
+        orderSyncing: true,
+      },
+      {
+        $set: {
+          orderSyncing: false,
+          orderSyncStartedAt: null,
+          orderSyncId: null,
+        },
       }
     );
 
-    console.log("queueOrder:", queueOrder);
-
-    /*
-     * Already being processed or already completed.
-     */
-    if (!queueOrder) {
-      return;
+    if (result.modifiedCount > 0) {
+      console.log(
+        `Order sync completed for restaurant ${restaurantId}, batch ${orderSyncId}`
+      );
+      return true;
     }
 
+    return false;
+  };
+
+  /**
+   * Process a queue document that has ALREADY been claimed.
+   */
+  const processClaimedOrder = async (queueOrder) => {
     const userData = {
       _id: queueOrder.userId,
       restaurantRef: queueOrder.restaurantId,
     };
 
-    let lastError = null;
+    let lastError;
 
-    /*
-     * Retry only the actual order processing.
-     *
-     * We don't re-claim the queue document on every retry.
-     */
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (
+      let attempt = 1;
+      attempt <= MAX_ORDER_RETRIES;
+      attempt += 1
+    ) {
+      let businessOperationCompleted = false;
+
       try {
         let actualOrder;
 
@@ -765,16 +1260,15 @@ module.exports = function (app) {
               queueOrder.payload,
               userData
             );
-
         } else if (queueOrder.operation === "UPDATE") {
-          actualOrder = await app.service.order.updateOfflineOrder(
-            {
-              ...queueOrder.payload,
-              idbId: queueOrder.orderId,
-            },
-            userData
-          );
-
+          actualOrder =
+            await app.service.order.updateOfflineOrder(
+              {
+                ...queueOrder.payload,
+                idbId: queueOrder.orderId,
+              },
+              userData
+            );
         } else {
           throw new Error(
             `Unsupported operation: ${queueOrder.operation}`
@@ -782,11 +1276,15 @@ module.exports = function (app) {
         }
 
         /*
-         * Everything succeeded.
-         *
-         * Mark queue item as SYNCED.
+         * The business operation succeeded.
+         * Do not repeat it immediately if only the queue-status
+         * update fails; doing so could duplicate side effects.
          */
-        await OrderQueue.updateOne(
+        businessOperationCompleted = true;
+
+        // return;
+
+        const updateResult = await OrderQueue.updateOne(
           {
             _id: queueOrder._id,
             status: "PROCESSING",
@@ -802,235 +1300,250 @@ module.exports = function (app) {
           }
         );
 
+        if (updateResult.modifiedCount !== 1) {
+          throw new Error(
+            `Business operation completed, but queue item ` +
+            `${queueOrder._id} was not marked SYNCED`
+          );
+        }
+
         console.log(
           `Offline order synced: ${queueOrder.orderId}`
         );
 
         return;
-
       } catch (error) {
         lastError = error;
 
         console.error(
-          `Offline order processing failed. ` +
-          `Order: ${queueOrder.orderId}, ` +
-          `Attempt: ${attempt}/${maxRetries}`,
+          `Offline order failed: ${queueOrder.orderId}; ` +
+          `attempt ${attempt}/${MAX_ORDER_RETRIES}`,
           error
         );
 
-        /*
-         * Retry only MongoDB write conflicts.
-         *
-         * Other errors should not be retried.
-         */
-        if (!isWriteConflict(error)) {
+        if (businessOperationCompleted) {
+          /*
+           * Keep PROCESSING for later recovery.
+           * The underlying service must be idempotent.
+           */
+          return;
+        }
+
+        if (
+          !isWriteConflict(error) ||
+          attempt === MAX_ORDER_RETRIES
+        ) {
           break;
         }
 
-        /*
-         * Final attempt failed.
-         */
-        if (attempt === maxRetries) {
-          break;
-        }
-
-        /*
-         * Exponential-ish backoff:
-         *
-         * Attempt 1 → 300ms
-         * Attempt 2 → 600ms
-         * Attempt 3 → final
-         */
-        const delay = attempt * 300;
-
-        console.log(
-          `Write conflict detected for queue ` +
-          `${queueOrder._id}. Retrying after ${delay}ms`
-        );
-
-        await sleep(delay);
+        await sleep(attempt * 300);
       }
     }
 
-    /*
-     * All retries failed or a non-retryable error occurred.
-     *
-     * ONLY NOW mark the queue item as FAILED.
-     */
-    try {
-      await OrderQueue.updateOne(
-        {
-          _id: queueOrder._id,
-          status: "PROCESSING",
+    await OrderQueue.updateOne(
+      {
+        _id: queueOrder._id,
+        status: "PROCESSING",
+      },
+      {
+        $set: {
+          status: "FAILED",
+          processingAt: null,
+          lastError: lastError?.message || "Unknown error",
         },
-        {
-          $set: {
-            status: "FAILED",
-            processingAt: null,
-            lastError:
-              lastError?.message ||
-              "Unknown error",
-          },
-          $inc: {
-            retryCount: 1,
-          },
-        }
-      );
-
-    } catch (queueUpdateError) {
+        $inc: {
+          retryCount: 1,
+        },
+      }
+    ).catch((error) => {
       console.error(
-        `Failed to mark queue item as FAILED: ${queueOrder._id}`,
-        queueUpdateError
+        `Could not mark queue item FAILED: ${queueOrder._id}`,
+        error
       );
-    }
+    });
+
+    await checkAndCompleteOrderSync(
+      queueOrder.restaurantId,
+      queueOrder.orderSyncId
+    );
 
     console.error(
       `Offline order permanently failed: ${queueOrder.orderId}`
     );
   };
 
-
   /**
-   * Add an order to the in-memory processing queue.
-   */
-  const enqueueOrderForProcessing = (queueId) => {
-    if (!queueId) {
-      return;
-    }
-
-    processingQueue.push(queueId);
-
-    processNextOrder();
-  };
-
-
-  /**
-   * Process queue items sequentially.
+   * One processor loop per restaurant.
    *
-   * Only one order is allowed to execute at a time.
+   * Same restaurant: sequential.
+   * Different restaurants: concurrent.
    */
-  const processNextOrder = async () => {
-    if (
-      isProcessingQueue ||
-      processingQueue.length === 0
-    ) {
+  const processRestaurantQueue = async (restaurantId) => {
+    if (!restaurantId) {
       return;
     }
 
-    isProcessingQueue = true;
+    const key = restaurantId.toString();
+    const state = getRestaurantQueueState(key);
 
-    const queueId = processingQueue.shift();
+    if (state.isProcessing) {
+      state.rerunRequested = true;
+      return;
+    }
+
+    state.isProcessing = true;
+    state.rerunRequested = false;
 
     try {
-      await processOrderQueue(queueId);
+      while (true) {
+        const queueOrder =
+          await OrderQueue.findOneAndUpdate(
+            {
+              restaurantId,
+              status: "PENDING",
+            },
+            {
+              $set: {
+                status: "PROCESSING",
+                processingAt: new Date(),
+              },
+            },
+            {
+              new: true,
+              sort: {
+                createdAt: 1,
+                _id: 1,
+              },
+            }
+          );
+
+        if (!queueOrder) {
+          break;
+        }
+
+        await processClaimedOrder(queueOrder);
+
+        await checkAndCompleteOrderSync(
+          queueOrder.restaurantId,
+          queueOrder.orderSyncId
+        );
+      }
     } catch (error) {
-      /*
-       * This should mainly catch unexpected errors outside
-       * the normal processing flow.
-       */
       console.error(
-        `Unexpected OrderQueue error: ${queueId}`,
+        `Queue processor failed for restaurant ${key}`,
         error
       );
     } finally {
-      isProcessingQueue = false;
+      // Release the in-memory processing lock first.
+      state.isProcessing = false;
 
-      /*
-       * Process next queued order.
-       */
-      processNextOrder();
+      try {
+        // 1. Check whether the current restaurant still has an active sync.
+        const restaurant = await Restaurant.findOne(
+          {
+            _id: restaurantId,
+            orderSyncing: true,
+          },
+          {
+            orderSyncId: 1,
+          }
+        ).lean();
+
+        // 2. Check whether the current batch is complete.
+        if (restaurant?.orderSyncId) {
+          await checkAndCompleteOrderSync(
+            restaurantId,
+            restaurant.orderSyncId
+          );
+        }
+
+        // 3. Check whether another processing pass was requested
+        // while this processor was running.
+        const shouldRerun = state.rerunRequested;
+        state.rerunRequested = false;
+
+        // 4. Check the actual database for pending orders.
+        const pending = await OrderQueue.exists({
+          restaurantId,
+          status: "PENDING",
+        });
+
+        // 5. Start another processing pass if necessary.
+        if (shouldRerun || pending) {
+          queueMicrotask(() => {
+            void processRestaurantQueue(restaurantId).catch((error) => {
+              console.error(
+                `Queue processor restart failed for restaurant ${key}`,
+                error
+              );
+            });
+          });
+        }
+      } catch (error) {
+        console.error(
+          `Queue processor cleanup failed for restaurant ${key}`,
+          error
+        );
+      }
     }
   };
 
-
   /**
-   * Start MongoDB Change Stream.
+   * Change Streams are a trigger, not the source of truth.
    */
   const startOrderQueueChangeStream = () => {
     const changeStream = OrderQueue.watch([
       {
         $match: {
           operationType: {
-            $in: ["insert", "update"],
+            $in: ["insert", "update", "replace"],
           },
         },
       },
-    ]);
+    ], {
+      fullDocument: "updateLookup",
+    });
 
-    changeStream.on("change", (change) => {
+    changeStream.on("change", async (change) => {
       try {
-        console.log(
-          "OrderQueue change:",
-          change
-        );
+        let queueOrder = change.fullDocument;
 
-        /*
-         * INSERT
-         *
-         * New queue document.
-         */
-        if (
-          change.operationType === "insert"
-        ) {
-          const queueOrder =
-            change.fullDocument;
+        if (change.operationType !== "insert") {
+          const changedStatus =
+            change.updateDescription?.updatedFields?.status;
 
-          if (!queueOrder?._id) {
+          if (
+            change.operationType === "update" &&
+            changedStatus !== "PENDING"
+          ) {
             return;
           }
 
-          enqueueOrderForProcessing(
-            queueOrder._id
-          );
-
-          return;
+          if (
+            !queueOrder &&
+            change.documentKey?._id
+          ) {
+            queueOrder = await OrderQueue.findById(
+              change.documentKey._id,
+              {
+                restaurantId: 1,
+                status: 1,
+              }
+            ).lean();
+          }
         }
 
-        /*
-         * UPDATE
-         *
-         * Process only when status changes
-         * to PENDING.
-         */
         if (
-          change.operationType === "update"
+          queueOrder?.restaurantId &&
+          queueOrder.status === "PENDING"
         ) {
-          const status =
-            change
-              .updateDescription
-              ?.updatedFields
-              ?.status;
-
-          if (status !== "PENDING") {
-            return;
-          }
-
-          /*
-           * For update events, fullDocument is not
-           * available by default.
-           *
-           * Use documentKey._id.
-           */
-          const queueId =
-            change.documentKey?._id;
-
-          if (!queueId) {
-            return;
-          }
-
-          console.log(
-            "Queue item moved to PENDING:",
-            queueId
-          );
-
-          enqueueOrderForProcessing(
-            queueId
+          void processRestaurantQueue(
+            queueOrder.restaurantId
           );
         }
-
       } catch (error) {
         console.error(
-          "OrderQueue Change Stream processing error:",
+          "OrderQueue Change Stream handler failed",
           error
         );
       }
@@ -1038,26 +1551,204 @@ module.exports = function (app) {
 
     changeStream.on("error", (error) => {
       console.error(
-        "OrderQueue Change Stream error:",
+        "OrderQueue Change Stream error",
         error
       );
     });
 
     changeStream.on("close", () => {
-      console.error(
-        "OrderQueue Change Stream closed"
-      );
+      console.error("OrderQueue Change Stream closed");
     });
 
-    console.log(
-      "OrderQueue Change Stream started"
-    );
+    console.log("OrderQueue Change Stream started");
 
     return changeStream;
   };
 
+  /**
+   * Run once after MongoDB connects.
+   *
+   * Recover stale PROCESSING records, then scan MongoDB for
+   * PENDING records so missed Change Stream events don't lose work.
+   */
+  const recoverOrderQueueOnStartup = async () => {
+    const staleBefore = new Date(
+      Date.now() - PROCESSING_STALE_AFTER_MS
+    );
+
+    // Only run this at startup, when the previous process is no longer
+    // processing queue items. Do not run indiscriminately while workers
+    // are active.
+    const recovery = await OrderQueue.updateMany(
+      {
+        status: "PROCESSING",
+        $or: [
+          { processingAt: null },
+          { processingAt: { $lt: staleBefore } },
+        ],
+      },
+      {
+        $set: {
+          status: "PENDING",
+          processingAt: null,
+          lastError: "Recovered after stale processing / server restart",
+        },
+        $inc: {
+          retryCount: 1,
+        },
+      }
+    );
+
+    console.log(
+      `Recovered ${recovery.modifiedCount || 0} stale OrderQueue item(s)`
+    );
+
+    // Find restaurants whose sync flag may have been left true.
+    const restaurants = await Restaurant.find(
+      { orderSyncing: true },
+      { _id: 1, orderSyncId: 1 }
+    ).lean();
+
+    for (const restaurant of restaurants) {
+      const { _id: restaurantId, orderSyncId } = restaurant;
+
+      if (!orderSyncId) {
+        console.error(
+          `Restaurant ${restaurantId} has orderSyncing=true without orderSyncId`
+        );
+        continue;
+      }
+
+      const outstanding = await OrderQueue.countDocuments({
+        restaurantId,
+        orderSyncId,
+        status: { $in: ["PENDING", "PROCESSING"] },
+      });
+
+      if (outstanding === 0) {
+        // All records are terminal. Clear the abandoned sync flag.
+        await checkAndCompleteOrderSync(restaurantId, orderSyncId);
+      } else {
+        // Continue processing this restaurant's active batch.
+        void processRestaurantQueue(restaurantId).catch((error) => {
+          console.error(
+            `Startup queue recovery failed for ${restaurantId}`,
+            error
+          );
+        });
+      }
+    }
+
+    // Also process PENDING records that may not belong to a currently
+    // flagged restaurant, so they are not silently ignored.
+    // const pendingRestaurantIds = await OrderQueue.distinct(
+    //   "restaurantId",
+    //   { status: "PENDING" }
+    // );
+
+    // for (const restaurantId of pendingRestaurantIds) {
+    //   void processRestaurantQueue(restaurantId).catch((error) => {
+    //     console.error(
+    //       `Startup pending queue processing failed for ${restaurantId}`,
+    //       error
+    //     );
+    //   });
+    // }
+  };
+
+  /**
+   * Optional helper for an explicit admin retry action.
+   */
+  const retryFailedOrderQueueItem = async (queueId) => {
+    const queueOrder = await OrderQueue.findById(queueId).lean();
+
+    if (!queueOrder || queueOrder.status !== "FAILED") {
+      return null;
+    }
+
+    const restaurantId = queueOrder.restaurantId;
+    const newOrderSyncId = randomUUID();
+
+    // Start a new sync batch. Only one active batch per restaurant.
+    const restaurant = await Restaurant.findOneAndUpdate(
+      {
+        _id: restaurantId,
+        orderSyncing: { $ne: true },
+      },
+      {
+        $set: {
+          orderSyncing: true,
+          orderSyncStartedAt: new Date(),
+          orderSyncId: newOrderSyncId,
+        },
+      },
+      { new: true }
+    );
+
+    if (!restaurant) {
+      throw new Error(
+        "Order synchronization is already in progress for this restaurant"
+      );
+    }
+
+    try {
+      const updatedQueueOrder = await OrderQueue.findOneAndUpdate(
+        {
+          _id: queueId,
+          status: "FAILED",
+        },
+        {
+          $set: {
+            status: "PENDING",
+            processingAt: null,
+            lastError: null,
+            orderSyncId: newOrderSyncId,
+          },
+        },
+        { new: true }
+      );
+
+      if (!updatedQueueOrder) {
+        await checkAndCompleteOrderSync(
+          restaurantId,
+          newOrderSyncId
+        );
+
+        return null;
+      }
+
+      void processRestaurantQueue(restaurantId).catch((error) => {
+        console.error(
+          `Failed to retry queue item ${queueId}`,
+          error
+        );
+      });
+
+      return updatedQueueOrder;
+    } catch (error) {
+      await checkAndCompleteOrderSync(
+        restaurantId,
+        newOrderSyncId
+      ).catch((cleanupError) => {
+        console.error("Retry cleanup failed:", cleanupError);
+      });
+
+      throw error;
+    }
+  };
+
+  /*
+   * Export using your project's existing module/export style.
+   *
+   * Startup, AFTER MongoDB connects:
+   *
+   * startOrderQueueChangeStream();
+   * await recoverOrderQueueOnStartup();
+   */
+
   return {
     'create': createOrder,
+    'createIdempotent': createOrderIdempotent,
     'createMulti': createMultiOrder,
     'get': findOrderById,
     'getFromUser': findOrderFromUserById,
@@ -1073,7 +1764,8 @@ module.exports = function (app) {
     'hasOrderForOwner': hasOrderForOwner,
     'updateUserDetails': updateUserDetails,
     'addOrdersToQueue': addOrdersToQueue,
-    'processOrderQueue': processOrderQueue,
-    'startOrderQueueChangeStream': startOrderQueueChangeStream
+    'startOrderQueueChangeStream': startOrderQueueChangeStream,
+    'recoverOrderQueueOnStartup': recoverOrderQueueOnStartup,
+    'retryFailedOrderQueueItem': retryFailedOrderQueueItem
   };
 };

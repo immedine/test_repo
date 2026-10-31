@@ -78,6 +78,7 @@ module.exports = function(app) {
     RequisitionAmountHistory: db.model('RequisitionAmountHistory', require('./models/requisitionAmountHistory')(app, mongoose, plugins)),
     TempOTP: db.model('TempOTP', require('./models/tempOtp')(app, mongoose, plugins)),
     OrderQueue: db.model('OrderQueue', require('./models/orderQueue')(app, mongoose, plugins)),
+    InventoryOperation: db.model('InventoryOperation', require('./models/inventoryOperation')(app, mongoose, plugins)),
   };
 
   return db;

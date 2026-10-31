@@ -1,7 +1,7 @@
 // models/orderQueue.model.js
 
 'use strict';
-module.exports = function(app, mongoose) {
+module.exports = function (app, mongoose) {
   const schema = new mongoose.Schema({
     orderId: {
       type: String,
@@ -72,11 +72,27 @@ module.exports = function(app, mongoose) {
       ref: "Order",
       default: null,
     },
+    orderSyncId: {
+      type: String,
+      default: null,
+    },
   },
-  {
-    versionKey: false,
-    timestamps: true,
+    {
+      versionKey: false,
+      timestamps: true,
+    });
+
+  schema.index({
+    restaurantId: 1,
+    status: 1,
+    createdAt: 1,
+    _id: 1,
   });
+
+  schema.index(
+    { restaurantId: 1, orderId: 1 },
+    { unique: true }
+  );
 
 
   return schema;

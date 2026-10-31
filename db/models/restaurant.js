@@ -360,7 +360,19 @@ module.exports = function (app, mongoose) {
         countryCode: { type: String, default: 'IN' },
         number: { type: String },
       }
-    }
+    },
+    orderSyncing: {
+      type: Boolean,
+      default: false,
+    },
+    orderSyncStartedAt: {
+      type: Date,
+      default: null,
+    },
+    orderSyncId: {
+      type: String,
+      default: null,
+    },
   }, {
     versionKey: false,
     timestamps: true,
