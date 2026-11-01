@@ -287,12 +287,13 @@ module.exports = function (app) {
 
   const downloadReport = (req, res, next) => {
 
-    let { startDate, endDate } = req.body.filters;
+    let { startDate, endDate, isOnline } = req.body.filters;
 
     inventory.downloadReport({
       startDate,
       endDate,
-      restaurantId: req.session.user.restaurantRef
+      restaurantId: req.session.user.restaurantRef,
+      isOnline: isOnline || true
     })
       .then(output => {
         // console.log("output ", output)
@@ -332,7 +333,8 @@ module.exports = function (app) {
 
             await inventory.updateHistoryOrderRef(
               inventoryOutput.invIds,
-              eachOrder._id
+              eachOrder._id,
+              false
             ).catch(err => {
               console.log(
                 "err updateHistoryOrderRef",

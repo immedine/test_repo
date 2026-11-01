@@ -1247,7 +1247,7 @@ module.exports = function (app) {
     }
   };
 
-  const updateHistoryOrderRef = async (inventoryIds, orderRef) => {
+  const updateHistoryOrderRef = async (inventoryIds, orderRef, isOnline = true) => {
     const session = await app.db.startSession();
 
     try {
@@ -1325,7 +1325,8 @@ module.exports = function (app) {
               },
               {
                 $set: {
-                  orderRef
+                  orderRef,
+                  isOnline
                 }
               },
               {
@@ -2557,7 +2558,9 @@ module.exports = function (app) {
               userData.personalInfo?.fullName,
 
             menuRef:
-              restoreUsageMenuRef[invId]
+              restoreUsageMenuRef[invId],
+
+            isOnline: false
           });
         }
 
@@ -2864,7 +2867,9 @@ module.exports = function (app) {
                 userData.personalInfo?.fullName,
 
               menuRef:
-                newIngredientMenuRef[invId]
+                newIngredientMenuRef[invId],
+
+              isOnline: false
             });
           }
 
@@ -3552,7 +3557,8 @@ module.exports = function (app) {
   const downloadReport = async ({
     startDate,
     endDate,
-    restaurantId
+    restaurantId,
+    isOnline = true
   }) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -3588,7 +3594,8 @@ module.exports = function (app) {
                     { $eq: ["$locationRef", "$$locId"] }
                   ]
                 },
-                createdAt: { $gte: start, $lte: end }
+                createdAt: { $gte: start, $lte: end },
+                isOnline: isOnline
               }
             },
             {

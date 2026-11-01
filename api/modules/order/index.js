@@ -37,10 +37,14 @@ module.exports = function (app) {
       }
     }
 
-    const totalOrders = await Order.countDocuments({
-      restaurantRef: userRef ? userRef.restaurantRef : config.restaurantRef
-    });
-    config.orderId = totalOrders ? (totalOrders + 1).toString() : "1";
+    if (config.isOnline !== false) {
+      const totalOrders = await Order.countDocuments({
+        restaurantRef: userRef ? userRef.restaurantRef : config.restaurantRef,
+        isOnline: true
+      });
+      config.orderId = totalOrders ? (totalOrders + 1).toString() : "1";
+    }
+    
     return Order.createOrder(config);
   };
 

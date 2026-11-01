@@ -70,6 +70,11 @@ module.exports = function (app, mongoose) {
       ref: "Menu"
     },
 
+    isOnline: {
+      type: Boolean,
+      default: true
+    },
+
     userName: String
   }, {
     versionKey: false,

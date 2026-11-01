@@ -2,8 +2,7 @@
 module.exports = function (app, mongoose) {
   const schema = new mongoose.Schema({
     orderId: {
-      type: String,
-      required: true
+      type: String
     },
     idbId: {
       type: String,
