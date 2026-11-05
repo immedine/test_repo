@@ -78,5 +78,16 @@ module.exports = function (app, mongoose) {
     return this.findByIdAndRemove(_id).exec();
   };
 
+  schema.index(
+    {
+      orderRef: 1,
+      restaurantRef: 1,
+      kotNo: 1,
+    },
+    {
+      unique: true,
+    }
+  );
+
   return schema;
 };

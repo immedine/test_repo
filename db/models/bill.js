@@ -2,8 +2,7 @@
 module.exports = function (app, mongoose) {
   const schema = new mongoose.Schema({
     billNo: {
-      type: String,
-      required: true
+      type: String
     },
     offlineId: {
       type: String

@@ -140,6 +140,37 @@ module.exports = function (app) {
     return KOT.removeKOT(kot._id);
   };
 
+  const addMissingKots = async (kots, orderRef, restaurantRef) => {
+    if (!Array.isArray(kots) || !kots.length) {
+      return [];
+    }
+
+    const operations = kots.map((kot) => ({
+      updateOne: {
+        filter: {
+          orderRef,
+          restaurantRef,
+          kotNo: kot.kotNo,
+        },
+        update: {
+          $setOnInsert: {
+            orderRef,
+            restaurantRef,
+            kotNo: kot.kotNo,
+            items: kot.items || [],
+          },
+        },
+        upsert: true,
+      },
+    }));
+
+    const result = await KOT.bulkWrite(operations, {
+      ordered: false,
+    });
+
+    return result;
+  };
+
   return {
     'create': createKOT,
     'createIdempotent': createKOTIdempotent,
@@ -147,6 +178,7 @@ module.exports = function (app) {
     'getByOrder': findKOTByOrderId,
     'list': getList,
     'listByRestaurant': getKOTsByRestaurant,
-    'remove': removeKOT
+    'remove': removeKOT,
+    'addMissingKots': addMissingKots
   };
 };

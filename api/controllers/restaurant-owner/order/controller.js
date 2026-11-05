@@ -1582,14 +1582,14 @@ module.exports = function (app) {
       }
 
       if (!req.body.noRevertBack) {
-        // const existingInventoryOperation = await inventory.findInventoryOperationByOrderId({
-        //   orderRef: orderData._id,
-        //   status: app.config.contentManagement.inventoryOperation.active
-        // }, req.session.user);
+        const existingInventoryOperation = await inventory.findInventoryOperationByOrderId({
+          orderRef: orderData._id,
+          status: app.config.contentManagement.inventoryOperation.active
+        }, req.session.user);
 
-        // if (existingInventoryOperation) {
-        //   return next({ 'errCode': 'UNSYNCED_INV_FOR_THIS_ORDER' });
-        // }
+        if (existingInventoryOperation) {
+          return next({ 'errCode': 'UNSYNCED_INV_FOR_THIS_ORDER' });
+        }
 
         await inventory.rollbackInventory(orderData._id, req.body.cart, true, orderData.reOrderCount, req.session.user);
       }

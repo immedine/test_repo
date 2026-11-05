@@ -71,31 +71,39 @@ module.exports = function (app) {
 
     const existingKot = await kot.getByOrder(orderOutput._id, userData);
 
-    if (!existingKot) {
-      const kotItems = orderData.cart.map(item => ({
-        menuRef: item.menuRef,
-        menuName: item.name,
-        quantity: item.quantity,
-        operation: "add",
-        subItems: item.subItems
-          ? item.subItems.map(sub => ({
-            menuRef: item.menuRef,
-            name: sub.name,
-            quantity: sub.quantity,
-            price: sub.price,
-            operation: "add"
-          }))
-          : []
-      }));
+    if (!existingKot?.length) {
+      if (orderData.kots?.length) {
+        await kot.addMissingKots(
+          orderData.kots,
+          orderOutput._id,
+          userData.restaurantRef
+        );
+      } else {
+        const kotItems = orderData.cart.map(item => ({
+          menuRef: item.menuRef,
+          menuName: item.name,
+          quantity: item.quantity,
+          operation: "add",
+          subItems: item.subItems
+            ? item.subItems.map(sub => ({
+              menuRef: item.menuRef,
+              name: sub.name,
+              quantity: sub.quantity,
+              price: sub.price,
+              operation: "add"
+            }))
+            : []
+        }));
 
-      try {
-        await kot.create({
-          orderRef: orderOutput._id,
-          restaurantRef: userData.restaurantRef,
-          items: kotItems
-        }, userData);
-      } catch (err) {
-        console.log("err creating KOT", err);
+        try {
+          await kot.create({
+            orderRef: orderOutput._id,
+            restaurantRef: userData.restaurantRef,
+            items: kotItems
+          }, userData);
+        } catch (err) {
+          console.log("err creating KOT", err);
+        }
       }
     }
 
@@ -544,15 +552,22 @@ module.exports = function (app) {
     /*
      * Create KOT if required.
      */
-    if (kotItems.length > 0) {
-      await kot.create(
-        {
+    if (orderDataInput.kots?.length) {
+      await kot.addMissingKots(
+        orderDataInput.kots,
+        orderData._id,
+        userData.restaurantRef
+      );
+    } else if (kotItems.length > 0) {
+      try {
+        await kot.create({
           orderRef: orderData._id,
           restaurantRef: userData.restaurantRef,
           items: kotItems
-        },
-        userData
-      );
+        }, userData);
+      } catch (err) {
+        console.log("err creating KOT", err);
+      }
     }
 
     if (orderDataInput.status !== app.config.contentManagement.order.completed &&
