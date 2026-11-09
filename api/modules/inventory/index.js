@@ -19,8 +19,49 @@ module.exports = function (app) {
   const InventoryHistory = app.models.InventoryHistory;
   const InventoryOperation = app.models.InventoryOperation;
 
-  const createInventoryOperation = function (config) {
-    return InventoryOperation.createInventoryOperation(config);
+  const createInventoryOperation = async (config) => {
+    const { cart } = config;
+
+    // Get unique menu IDs from cart
+    const menuRefs = [
+      ...new Set(
+        cart
+          .map((item) => item.menuRef)
+          .filter(Boolean)
+          .map((id) => id.toString())
+      ),
+    ];
+
+    // Fetch menus with ingredients
+    const menus = await Menu.find(
+      {
+        _id: { $in: menuRefs },
+      },
+      {
+        ingredients: 1,
+      }
+    ).lean();
+
+    // Keep only cart items whose menu has ingredients
+    const inventoryCart = cart.filter((item) => {
+      const menu = menus.find(
+        (menu) => menu._id.toString() === item.menuRef.toString()
+      );
+
+      return menu?.ingredients?.length > 0;
+    });
+
+    if (!inventoryCart.length) {
+      return Promise.resolve({
+        success: true,
+        message: "No inventory operation required",
+      });
+    }
+    return InventoryOperation.createInventoryOperation({
+      ...config,
+      cart: inventoryCart,
+    });
+
   };
 
   const listInventoryOperation = async function (config) {
