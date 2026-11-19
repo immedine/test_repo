@@ -1143,13 +1143,18 @@ module.exports = function (app) {
 
     // order.list(query)
     return Promise.all([
-      order.list(query),
-      req.body.orderList && req.body.orderList.length ? order.list(idbQuery) : []
+      order.list(query)
     ])
-      .then(([queryResult, idbResult]) => {
-        const output = idbResult && idbResult.data ? [...queryResult.data, ...idbResult.data] : [...queryResult.data];
+      .then(async ([queryResult]) => {
+        const output = [...queryResult.data];
+
+        const orderIds = output.map(each => each._id.toString());
+
+        const allKotItems = await kot.getKotsByOrderIds(orderIds);
+
         req.workflow.outcome.data = {
-          data: output
+          data: output,
+          kots: allKotItems
         };
         req.workflow.emit('response');
       })

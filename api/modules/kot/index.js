@@ -171,6 +171,32 @@ module.exports = function (app) {
     return result;
   };
 
+  const getKotsByOrderIds = async (orderIds) => {
+    try {
+      if (!Array.isArray(orderIds) || !orderIds.length) {
+        return {};
+      }
+
+      const kots = await KOT.find({
+        orderRef: { $in: orderIds },
+      }).select('kotNo items _id createdAt orderRef').lean();
+
+      return kots.reduce((acc, kot) => {
+        const orderId = kot.orderRef.toString();
+
+        if (!acc[orderId]) {
+          acc[orderId] = [];
+        }
+
+        acc[orderId].push(kot);
+
+        return acc;
+      }, {});
+    } catch (error) {
+      throw error;
+    }
+};
+
   return {
     'create': createKOT,
     'createIdempotent': createKOTIdempotent,
@@ -179,6 +205,7 @@ module.exports = function (app) {
     'list': getList,
     'listByRestaurant': getKOTsByRestaurant,
     'remove': removeKOT,
-    'addMissingKots': addMissingKots
+    'addMissingKots': addMissingKots,
+    'getKotsByOrderIds': getKotsByOrderIds
   };
 };
